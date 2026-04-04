@@ -1,0 +1,6 @@
+# Ignore local spreadsheets and temporary files
+*.xlsx
+*.xls
+temp_check_repo.py
+.DS_Store
+Thumbs.db

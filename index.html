@@ -10,6 +10,14 @@
     <link rel="stylesheet" href="styles.css?v=20260404-001">
 </head>
 <body>
+    <div id="passwordOverlay" style="position:fixed;z-index:9999;top:0;left:0;width:100%;height:100%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;overflow:hidden;">
+        <h2 style="font-size:1.5rem;text-align:center;">Protected: Gaviola Consulting Only</h2>
+        <form id="pwForm" style="display:flex;flex-direction:column;align-items:center;width:90vw;max-width:350px;">
+            <input type="password" id="pwInput" placeholder="Enter password" style="padding:0.7rem;font-size:1.2rem;margin-bottom:1rem;width:100%;box-sizing:border-box;" autocomplete="current-password" required />
+            <button type="submit" style="padding:0.7rem 2rem;font-size:1.2rem;width:100%;">Enter</button>
+            <div id="pwError" style="color:red;margin-top:0.5rem;display:none;">Incorrect password</div>
+        </form>
+    </div>
     <header>
         <h1>Debra's Deals Inventory System</h1>
     </header>
@@ -27,5 +35,38 @@
     </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="script.js?v=20260404-001"></script>
+    <script>
+    // Simple password protection (client-side only, mobile compatible)
+    const CORRECT_PW = "gaviola2026";
+    const overlay = document.getElementById('passwordOverlay');
+    const pwForm = document.getElementById('pwForm');
+    const pwInput = document.getElementById('pwInput');
+    const pwError = document.getElementById('pwError');
+    // Prevent scrolling while overlay is visible
+    document.body.style.overflow = 'hidden';
+    function unlock() {
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+        pwInput.value = '';
+    }
+    pwForm.onsubmit = function(e) {
+        e.preventDefault();
+        if (pwInput.value === CORRECT_PW) {
+            unlock();
+        } else {
+            pwError.style.display = 'block';
+            pwInput.value = '';
+            pwInput.focus();
+        }
+    };
+    // Autofocus workaround for iOS Safari
+    setTimeout(() => { try { pwInput.focus(); } catch(e){} }, 300);
+    // Hide keyboard on Enter (mobile)
+    pwInput.addEventListener('keyup', function(e) {
+        if (e.key === 'Enter' && pwInput.value === CORRECT_PW) {
+            unlock();
+        }
+    });
+    </script>
 </body>
 </html>

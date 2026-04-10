@@ -27,7 +27,17 @@ products = products.map(p => ({
     hyperlink: p.hyperlink || '',
     notes: p.notes || [],
     purchaseName: p.purchaseName || '',
-    purchaseSource: p.purchaseSource || ''
+    purchaseSource: p.purchaseSource || '',
+    // Added fields for spreadsheet mapping
+    condition: p.condition || '',
+    descPuDate: p.descPuDate || '',
+    asin: p.asin || '',
+    listDate: p.listDate || '',
+    soldDate: p.soldDate || '',
+    retail: p.retail || '',
+    soldFor: p.soldFor || '',
+    profit: p.profit !== undefined ? p.profit : '',
+    totalPrice: p.totalPrice !== undefined ? p.totalPrice : (p.price && p.quantity ? (p.price * p.quantity) : ''),
 }));
 
 // Ensure sales have pickedUp and profit
@@ -595,30 +605,27 @@ function showInventory(sortByLocation = false) {
             const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
             for (let i = startIdx; i < endIdx; i++) {
                 const product = filteredProducts[i];
-                const availability = product.quantity > 0 ? 'Available' : 'Out of Stock';
-                const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : 'No Link';
-                let nameDisplay = product.name || '';
-                if (nameDisplay && (nameDisplay.startsWith('http://') || nameDisplay.startsWith('https://'))) {
-                    nameDisplay = `<a href="${nameDisplay}" target="_blank" style="color: blue; text-decoration: underline;">${nameDisplay}</a>`;
-                }
-                const notes = product.notes && Array.isArray(product.notes) ? product.notes.map(note => {
-                    const color = note.type === 'Priority' ? 'red' : note.type === 'Self' ? 'blue' : 'green';
-                    return `<span style="color: ${color};">${note.type}: ${note.text}</span>`;
-                }).join('<br>') : '';
+                const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : '';
+                const notes = product.notes && Array.isArray(product.notes) ? product.notes.map(note => note.text).join('; ') : '';
                 const escapedSku = (product.sku || '').replace(/'/g, "\\'");
                 html += `
                     <tr>
-                        <td>${product.sku || ''}</td>
-                        <td>${nameDisplay}</td>
-                        <td>$${product.cost ? product.cost.toFixed(2) : '0.00'}</td>
-                        <td>$${product.price ? product.price.toFixed(2) : '0.00'}</td>
+                        <td>${product.condition || ''}</td>
+                        <td>${product.descPuDate || ''}</td>
+                        <td>${product.asin || ''}</td>
+                        <td>${product.name || ''}</td>
                         <td>${product.quantity || 0}</td>
+                        <td>$${product.price ? product.price.toFixed(2) : ''}</td>
+                        <td>$${product.totalPrice ? Number(product.totalPrice).toFixed(2) : (product.price && product.quantity ? (product.price * product.quantity).toFixed(2) : '')}</td>
+                        <td>${product.sku || ''}</td>
                         <td>${product.location || ''}</td>
-                        <td>${product.purchaseName || ''}</td>
-                        <td>${product.purchaseSource || ''}</td>
-                        <td>${hyperlink}</td>
+                        <td>${product.listDate || ''}</td>
+                        <td>${product.soldDate || ''}</td>
+                        <td>$${product.retail ? Number(product.retail).toFixed(2) : ''}</td>
+                        <td>$${product.soldFor ? Number(product.soldFor).toFixed(2) : ''}</td>
+                        <td>$${product.profit !== undefined && product.profit !== '' ? Number(product.profit).toFixed(2) : ''}</td>
                         <td>${notes}</td>
-                        <td>${availability}</td>
+                        <td>${hyperlink}</td>
                         <td><button onclick="editProduct('${escapedSku}')">Edit</button></td>
                     </tr>
                 `;

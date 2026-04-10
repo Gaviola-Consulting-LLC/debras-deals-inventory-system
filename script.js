@@ -550,8 +550,6 @@ function showInventory(sortByLocation = false) {
         }
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="keywordSearch" placeholder="Search (min 2 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
-        html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
         // Pagination controls
@@ -570,16 +568,16 @@ function showInventory(sortByLocation = false) {
                 <table>
                     <thead>
                         <tr>
-                            <th>SKU</th>
-                            <th>Name</th>
-                            <th>Cost</th>
-                            <th>Price</th>
-                            <th>Quantity</th>
-                            <th>Location</th>
-                            <th>Purchase Name</th>
-                            <th>Source of Purchase</th>
-                            <th>Hyperlink</th>
-                            <th>Notes</th>
+                            <th>SKU<br><input type="text" id="searchSku" style="width:90px;" placeholder="Search"></th>
+                            <th>Name<br><input type="text" id="searchName" style="width:90px;" placeholder="Search"></th>
+                            <th>Cost<br><input type="text" id="searchCost" style="width:60px;" placeholder="Search"></th>
+                            <th>Price<br><input type="text" id="searchPrice" style="width:60px;" placeholder="Search"></th>
+                            <th>Quantity<br><input type="text" id="searchQuantity" style="width:60px;" placeholder="Search"></th>
+                            <th>Location<br><input type="text" id="searchLocation" style="width:90px;" placeholder="Search"></th>
+                            <th>Purchase Name<br><input type="text" id="searchPurchaseName" style="width:90px;" placeholder="Search"></th>
+                            <th>Source of Purchase<br><input type="text" id="searchPurchaseSource" style="width:90px;" placeholder="Search"></th>
+                            <th>Hyperlink<br><input type="text" id="searchHyperlink" style="width:90px;" placeholder="Search"></th>
+                            <th>Notes<br><input type="text" id="searchNotes" style="width:90px;" placeholder="Search"></th>
                             <th>Availability</th>
                             <th>Actions</th>
                         </tr>
@@ -621,16 +619,26 @@ function showInventory(sortByLocation = false) {
             html += '</tbody></table>';
         }
         mainContent.innerHTML = html;
-        // Attach search events
+        // Attach per-header search events
         setTimeout(() => {
-            const kwInput = document.getElementById('keywordSearch');
-            const kwBtn = document.getElementById('keywordSearchBtn');
-            if (kwInput) {
-                kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
-            }
-            if (kwBtn) {
-                kwBtn.onclick = filterByKeyword;
-            }
+            const searchFields = [
+                { id: 'searchSku', key: 'sku' },
+                { id: 'searchName', key: 'name' },
+                { id: 'searchCost', key: 'cost' },
+                { id: 'searchPrice', key: 'price' },
+                { id: 'searchQuantity', key: 'quantity' },
+                { id: 'searchLocation', key: 'location' },
+                { id: 'searchPurchaseName', key: 'purchaseName' },
+                { id: 'searchPurchaseSource', key: 'purchaseSource' },
+                { id: 'searchHyperlink', key: 'hyperlink' },
+                { id: 'searchNotes', key: 'notes' }
+            ];
+            searchFields.forEach(field => {
+                const input = document.getElementById(field.id);
+                if (input) {
+                    input.addEventListener('input', filterByHeader);
+                }
+            });
         }, 0);
     // Pagination controls remain here if needed
     }

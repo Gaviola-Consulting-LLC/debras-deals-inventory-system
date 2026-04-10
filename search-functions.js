@@ -1,29 +1,37 @@
-// --- Advanced Search Functions (Top Level, Only Once) ---
-function filterByKeyword() {
-    const input = document.getElementById('keywordSearch');
-    if (!input) return;
-    const term = input.value.trim().toLowerCase();
-    if (term.length < 2) {
-        filteredProducts = products;
-        showInventory(isSortedByLocation);
-        return;
-    }
+// Per-header search for inventory table
+function filterByHeader() {
+    // Collect all header search values
+    const fields = [
+        { id: 'searchSku', key: 'sku' },
+        { id: 'searchName', key: 'name' },
+        { id: 'searchCost', key: 'cost' },
+        { id: 'searchPrice', key: 'price' },
+        { id: 'searchQuantity', key: 'quantity' },
+        { id: 'searchLocation', key: 'location' },
+        { id: 'searchPurchaseName', key: 'purchaseName' },
+        { id: 'searchPurchaseSource', key: 'purchaseSource' },
+        { id: 'searchHyperlink', key: 'hyperlink' },
+        { id: 'searchNotes', key: 'notes' }
+    ];
+    let filters = {};
+    fields.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (el && el.value.trim() !== '') {
+            filters[f.key] = el.value.trim().toLowerCase();
+        }
+    });
     filteredProducts = products.filter(p => {
-        return [
-            p.sku, p.name, p.cost, p.price, p.quantity, p.location, p.purchaseName, p.purchaseSource, p.hyperlink,
-            ...(Array.isArray(p.notes) ? p.notes.map(n => n.text) : [])
-        ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
+        return Object.entries(filters).every(([key, val]) => {
+            if (key === 'notes') {
+                return (Array.isArray(p.notes) ? p.notes.map(n => n.text).join(' ') : '').toLowerCase().includes(val);
+            }
+            return p[key] !== undefined && String(p[key]).toLowerCase().includes(val);
+        });
     });
     inventoryPage = 1;
     showInventory(isSortedByLocation);
 }
-function clearKeywordSearch() {
-    const input = document.getElementById('keywordSearch');
-    if (input) input.value = '';
-    filteredProducts = products;
-    inventoryPage = 1;
-    showInventory(isSortedByLocation);
-}
+// --- Advanced Search Functions (Top Level, Only Once) ---
 function filterSalesByKeyword() {
     const input = document.getElementById('salesKeywordSearch');
     if (!input) return;

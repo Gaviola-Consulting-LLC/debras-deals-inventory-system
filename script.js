@@ -32,6 +32,15 @@ let isSortedByLocation = false;
 let filteredProducts = products;
 let inventoryPage = 1;
 const ITEMS_PER_PAGE = 100;
+// Patch: Expose pagination functions globally so HTML buttons work
+window.nextInventoryPage = function() {
+    inventoryPage++;
+    showInventory(isSortedByLocation);
+};
+window.prevInventoryPage = function() {
+    inventoryPage--;
+    showInventory(isSortedByLocation);
+};
 
 // DOM elements
 const mainContent = document.getElementById('mainContent');
@@ -337,6 +346,7 @@ function showScanForm() {
     mainContent.innerHTML = `
         <h2>Scan SKU (Barcode or Manual)</h2>
         <div id="barcodeArea" style="margin-bottom:1rem;"></div>
+        <button id="startCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
         <form id="scanForm">
             <label for="scanSku">Enter or Scan SKU:</label>
             <input type="text" id="scanSku" required autocomplete="off">
@@ -344,11 +354,13 @@ function showScanForm() {
         </form>
         <div id="scanResult" style="margin-top:1rem;"></div>
     `;
-    // Barcode scanner setup
-    if (window.Html5Qrcode) {
+    let html5Qr = null;
+    let cameraActive = false;
+    function startCamera() {
+        if (!window.Html5Qrcode) return;
         const barcodeArea = document.getElementById('barcodeArea');
         barcodeArea.innerHTML = '<div id="reader" style="width:320px;max-width:100vw;"></div>';
-        const html5Qr = new Html5Qrcode("reader");
+        html5Qr = new Html5Qrcode("reader");
         Html5Qrcode.getCameras().then(cameras => {
             if (cameras && cameras.length) {
                 html5Qr.start(
@@ -357,10 +369,12 @@ function showScanForm() {
                     (decodedText, decodedResult) => {
                         document.getElementById('scanSku').value = decodedText;
                         html5Qr.stop();
+                        cameraActive = false;
                         handleScanSku(decodedText);
                     },
                     (errorMsg) => {}
-                ).catch(err => {
+                ).then(() => { cameraActive = true; })
+                .catch(err => {
                     barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
                 });
             } else {
@@ -370,12 +384,18 @@ function showScanForm() {
             barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
         });
     }
+    document.getElementById('startCameraBtn').onclick = function() {
+        if (!cameraActive) startCamera();
+    };
+    // Optionally auto-start camera on mobile
+    if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        setTimeout(() => { if (!cameraActive) startCamera(); }, 500);
+    }
     document.getElementById('scanForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const sku = document.getElementById('scanSku').value;
         handleScanSku(sku);
     });
-
     function handleScanSku(sku) {
         const product = products.find(p => p.sku === sku);
         const scanResult = document.getElementById('scanResult');
@@ -388,7 +408,6 @@ function showScanForm() {
             product.quantity += 1;
             saveData();
             scanResult.innerHTML = `<span style='color:green;'>Added 1. New quantity: ${product.quantity}</span>`;
-            // Optionally record as a purchase (not a sale)
             showInventory();
         };
         document.getElementById('subtractBtn').onclick = function() {
@@ -541,19 +560,29 @@ function showInventory(sortByLocation = false) {
         }, 0);
     // Advanced search by any field, min 3 letters
     function filterByKeyword() {
-        const term = document.getElementById('keywordSearch').value.trim().toLowerCase();
+        const input = document.getElementById('keywordSearch');
+        if (!input) return;
+        const term = input.value.trim().toLowerCase();
         if (term.length < 3) {
             alert('Enter at least 3 letters to search.');
             return;
         }
         filteredProducts = products.filter(p => {
-            return Object.values(p).some(val => (typeof val === 'string' && val.toLowerCase().includes(term)));
+            return Object.keys(p).some(key => {
+                let val = p[key];
+                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
+                if (Array.isArray(val)) {
+                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
+                }
+                return false;
+            });
         });
         inventoryPage = 1;
         showInventory(isSortedByLocation);
     }
     function clearKeywordSearch() {
-        document.getElementById('keywordSearch').value = '';
+        const input = document.getElementById('keywordSearch');
+        if (input) input.value = '';
         filteredProducts = products;
         inventoryPage = 1;
         showInventory(isSortedByLocation);

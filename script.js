@@ -334,6 +334,9 @@ function updateProduct(e, oldSku) {
 function showScanForm() {
     mainContent.innerHTML = `
         <h2>Scan SKU (Barcode or Manual)</h2>
+        <div style="color:#555;font-size:1em;margin-bottom:0.5em;">
+            <b>Tip:</b> Place the barcode in the center of the box, hold steady, and ensure good lighting. For best results, use a clean camera lens and avoid glare.
+        </div>
         <div id="barcodeArea" style="margin-bottom:1rem;"></div>
         <div id="cameraStatus" style="color:#237804;font-size:1em;margin-bottom:0.5em;"></div>
         <button id="startCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
@@ -368,7 +371,7 @@ function showScanForm() {
         cameraStarting = true;
         await stopCamera();
         const barcodeArea = document.getElementById('barcodeArea');
-        barcodeArea.innerHTML = '<div id="reader" style="width:340px;max-width:100vw;"></div>';
+        barcodeArea.innerHTML = '<div id="reader" style="width:400px;max-width:100vw;"></div>';
         updateCameraStatus('Starting camera...', '#237804');
         if (!window.Html5Qrcode) {
             barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner library not loaded. Please check your internet connection and reload the page.</div>';
@@ -386,7 +389,7 @@ function showScanForm() {
                 updateCameraStatus('Camera found. Initializing scan...', '#237804');
                 html5Qr.start(
                     { facingMode: "environment" },
-                    { fps: 5, qrbox: 320 }, // less sensitive: lower fps, bigger box
+                    { fps: 2, qrbox: 380 }, // even less sensitive: lower fps, much bigger box
                     async (decodedText, decodedResult) => {
                         updateCameraStatus('Barcode detected: ' + decodedText, '#237804');
                         document.getElementById('scanSku').value = decodedText;
@@ -701,29 +704,38 @@ function showMakeSaleForm() {
     mainContent.innerHTML = html;
     // Camera logic for Make Sale
     let saleQr = null;
-    document.getElementById('startSaleCameraBtn')?.addEventListener('click', function() {
+    let saleCameraActive = false;
+    async function stopSaleCamera() {
+        if (saleQr && saleCameraActive) {
+            try { await saleQr.stop(); } catch (e) {}
+            saleCameraActive = false;
+        }
+    }
+    document.getElementById('startSaleCameraBtn')?.addEventListener('click', async function() {
         const barcodeArea = document.getElementById('saleBarcodeArea');
-        barcodeArea.innerHTML = '<div id="saleReader" style="width:320px;max-width:100vw;"></div>';
+        await stopSaleCamera();
+        barcodeArea.innerHTML = '<div id="saleReader" style="width:400px;max-width:100vw;"></div>';
         if (window.Html5Qrcode) {
             saleQr = new Html5Qrcode("saleReader");
             Html5Qrcode.getCameras().then(cameras => {
                 if (cameras && cameras.length) {
                     saleQr.start(
                         { facingMode: "environment" },
-                        { fps: 10, qrbox: 250 },
+                        { fps: 2, qrbox: 380 }, // match inventory scan settings
                         (decodedText, decodedResult) => {
                             // Try to select product by SKU
                             const idx = products.findIndex(p => p.sku === decodedText && p.quantity > 0);
                             if (idx !== -1) {
                                 document.getElementById('productSelect').value = idx;
                                 barcodeArea.innerHTML = `<span style='color:green;'>Product selected: ${products[idx].name} (SKU: ${products[idx].sku})</span>`;
-                                saleQr.stop();
+                                stopSaleCamera();
                             } else {
                                 barcodeArea.innerHTML = `<span style='color:red;'>SKU not found or out of stock: ${decodedText}</span>`;
                             }
                         },
                         (errorMsg) => {}
-                    ).catch(err => {
+                    ).then(() => { saleCameraActive = true; })
+                    .catch(err => {
                         barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
                     });
                 } else {

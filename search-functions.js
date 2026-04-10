@@ -47,7 +47,7 @@ function filterByHeader() {
             filters[f.key] = el.value.trim().toLowerCase();
         }
     });
-    filteredProducts = products.filter(p => {
+    window.filteredProducts = window.products.filter(p => {
         return Object.entries(filters).every(([key, val]) => {
             if (key === 'notes') {
                 return (Array.isArray(p.notes) ? p.notes.map(n => n.text).join(' ') : '').toLowerCase().includes(val);
@@ -55,8 +55,8 @@ function filterByHeader() {
             return p[key] !== undefined && String(p[key]).toLowerCase().includes(val);
         });
     });
-    inventoryPage = 1;
-    showInventory(isSortedByLocation);
+    window.inventoryPage = 1;
+    showInventory(window.isSortedByLocation);
 }
 // --- Advanced Search Functions (Top Level, Only Once) ---
 function filterSalesByKeyword() {

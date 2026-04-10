@@ -261,19 +261,19 @@ function addProduct(e) {
     const purchaseSource = document.getElementById('purchaseSource').value;
     const notesText = document.getElementById('notes').value;
     // Check if SKU already exists
-    if (products.find(p => p.sku === sku)) {
+    if (window.products.find(p => p.sku === sku)) {
         alert('SKU already exists!');
         return;
     }
     const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+    window.products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
     saveData();
     alert('Product added successfully!');
     showInventory();
 }
 
 function editProduct(sku) {
-    const product = products.find(p => p.sku === sku);
+    const product = window.products.find(p => p.sku === sku);
     if (!product) return;
     
     const notesText = product.notes.map(note => `${note.type}: ${note.text}`).join('\n');
@@ -321,10 +321,10 @@ function updateProduct(e, oldSku) {
     const purchaseName = document.getElementById('editPurchaseName').value;
     const purchaseSource = document.getElementById('editPurchaseSource').value;
     const notesText = document.getElementById('editNotes').value;
-    const productIndex = products.findIndex(p => p.sku === oldSku);
+    const productIndex = window.products.findIndex(p => p.sku === oldSku);
     if (productIndex === -1) return;
     // Check if new SKU already exists (if changed)
-    if (newSku !== oldSku && products.find(p => p.sku === newSku)) {
+    if (newSku !== oldSku && window.products.find(p => p.sku === newSku)) {
         alert('SKU already exists!');
         return;
     }
@@ -332,7 +332,7 @@ function updateProduct(e, oldSku) {
         const [type, ...textParts] = line.split(': ');
         return {type: type || 'Product', text: textParts.join(': ') || line};
     }).filter(note => note.text.trim());
-    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
+    window.products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
     saveData();
     alert('Product updated successfully!');
     showInventory();
@@ -553,7 +553,7 @@ function scanSku(e) {
 function showInventory(sortByLocation = false) {
     try {
         if (sortByLocation) {
-            filteredProducts.sort((a, b) => (a.location || '').toLowerCase().localeCompare((b.location || '').toLowerCase()));
+            window.filteredProducts.sort((a, b) => (a.location || '').toLowerCase().localeCompare((b.location || '').toLowerCase()));
         }
         
         let html = '<h2>Inventory</h2>';
@@ -561,15 +561,15 @@ function showInventory(sortByLocation = false) {
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
         // Pagination controls
-        const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
-        if (inventoryPage > totalPages) inventoryPage = totalPages;
-        if (inventoryPage < 1) inventoryPage = 1;
-        if (filteredProducts.length > ITEMS_PER_PAGE) {
-            html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${inventoryPage}</span> of ${totalPages} ` +
-                `<button onclick='prevInventoryPage()' ${inventoryPage === 1 ? 'disabled' : ''}>&lt; Prev</button> ` +
-                `<button onclick='nextInventoryPage()' ${inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
+        const totalPages = Math.ceil(window.filteredProducts.length / window.ITEMS_PER_PAGE) || 1;
+        if (window.inventoryPage > totalPages) window.inventoryPage = totalPages;
+        if (window.inventoryPage < 1) window.inventoryPage = 1;
+        if (window.filteredProducts.length > window.ITEMS_PER_PAGE) {
+            html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${window.inventoryPage}</span> of ${totalPages} ` +
+                `<button onclick='prevInventoryPage()' ${window.inventoryPage === 1 ? 'disabled' : ''}>&lt; Prev</button> ` +
+                `<button onclick='nextInventoryPage()' ${window.inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
         }
-        if (filteredProducts.length === 0) {
+        if (window.filteredProducts.length === 0) {
             html += '<p>No products match the search.</p>';
         } else {
             html += `
@@ -592,10 +592,10 @@ function showInventory(sortByLocation = false) {
                     </thead>
                     <tbody>
             `;
-            const startIdx = (inventoryPage - 1) * ITEMS_PER_PAGE;
-            const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
+            const startIdx = (window.inventoryPage - 1) * window.ITEMS_PER_PAGE;
+            const endIdx = Math.min(startIdx + window.ITEMS_PER_PAGE, window.filteredProducts.length);
             for (let i = startIdx; i < endIdx; i++) {
-                const product = filteredProducts[i];
+                const product = window.filteredProducts[i];
                 const availability = product.quantity > 0 ? 'Available' : 'Out of Stock';
                 const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : 'No Link';
                 let nameDisplay = product.name || '';

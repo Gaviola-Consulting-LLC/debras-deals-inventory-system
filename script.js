@@ -146,19 +146,27 @@ function uploadSpreadsheet(e) {
                     const cell = worksheet[cellAddr];
                     headers.push(cell ? String(cell.v || '') : '');
                 }
-                // Map columns
+                // Map columns (full mapping for all headers)
                 const colMap = {};
                 headers.forEach((header, index) => {
                     if (header) {
                         const h = header.toLowerCase().trim();
-                        if (h.includes('sku')) colMap.sku = index;
-                        else if (h.includes('item title') || h.includes('desc')) colMap.name = index;
-                        else if (h.includes('item price') || h.includes('cost')) colMap.cost = index;
-                        else if (h.includes('retail') || h.includes('selling price')) colMap.price = index;
-                        else if (h.includes('qty') || h.includes('quantity')) colMap.quantity = index;
-                        else if (h.includes('loc') || h.includes('location')) colMap.location = index;
-                        else if (h.includes('link') || h.includes('hyperlink')) colMap.hyperlink = index;
+                        if (h.includes('condition')) colMap.condition = index;
+                        else if (h.includes('desc') || h.includes('pu date')) colMap.descPuDate = index;
+                        else if (h.includes('asin')) colMap.asin = index;
+                        else if (h.includes('item title') || h.includes('name') || h.includes('title')) colMap.name = index;
+                        else if (h === 'qty' || h.includes('quantity')) colMap.quantity = index;
+                        else if (h.includes('item price')) colMap.price = index;
+                        else if (h.includes('total price')) colMap.totalPrice = index;
+                        else if (h === 'sku') colMap.sku = index;
+                        else if (h === 'loc' || h.includes('location')) colMap.location = index;
+                        else if (h.includes('list date')) colMap.listDate = index;
+                        else if (h.includes('sold date')) colMap.soldDate = index;
+                        else if (h.includes('retail')) colMap.retail = index;
+                        else if (h.includes('sold for')) colMap.soldFor = index;
+                        else if (h.includes('profit')) colMap.profit = index;
                         else if (h.includes('notes')) colMap.notes = index;
+                        else if (h === 'link' || h.includes('hyperlink')) colMap.hyperlink = index;
                     }
                 });
                 let addedCount = 0;
@@ -178,34 +186,39 @@ function uploadSpreadsheet(e) {
                     const sku = rowData[colMap.sku];
                     if (!sku) continue; // Skip rows without SKU
                     const existing = products.find(p => p.sku === sku);
+                    // Build product from all mapped columns
+                    const productData = {
+                        sku: sku,
+                        name: colMap.name !== undefined ? rowData[colMap.name] : '',
+                        cost: colMap.cost !== undefined ? parseFloat(rowData[colMap.cost]) || 0 : 0,
+                        price: colMap.price !== undefined ? parseFloat(rowData[colMap.price]) || 0 : 0,
+                        quantity: colMap.quantity !== undefined ? parseInt(rowData[colMap.quantity]) || 0 : 0,
+                        location: colMap.location !== undefined ? rowData[colMap.location] : '',
+                        hyperlink: colMap.hyperlink !== undefined ? rowData[colMap.hyperlink] : '',
+                        notes: [],
+                        condition: colMap.condition !== undefined ? rowData[colMap.condition] : '',
+                        descPuDate: colMap.descPuDate !== undefined ? rowData[colMap.descPuDate] : '',
+                        asin: colMap.asin !== undefined ? rowData[colMap.asin] : '',
+                        listDate: colMap.listDate !== undefined ? rowData[colMap.listDate] : '',
+                        soldDate: colMap.soldDate !== undefined ? rowData[colMap.soldDate] : '',
+                        retail: colMap.retail !== undefined ? rowData[colMap.retail] : '',
+                        soldFor: colMap.soldFor !== undefined ? rowData[colMap.soldFor] : '',
+                        profit: colMap.profit !== undefined ? rowData[colMap.profit] : '',
+                        totalPrice: colMap.totalPrice !== undefined ? rowData[colMap.totalPrice] : '',
+                    };
+                    if (colMap.notes !== undefined && rowData[colMap.notes]) {
+                        const noteText = rowData[colMap.notes];
+                        productData.notes.push({type: 'Product', text: noteText});
+                        // If the note looks like a name (letters and spaces, no @ or http), set as purchaser name
+                        if (!productData.purchaseName && /^[A-Za-z .,'-]+$/.test(noteText.trim()) && !noteText.includes('@') && !noteText.toLowerCase().includes('http')) {
+                            productData.purchaseName = noteText.trim();
+                        }
+                    }
                     if (existing) {
-                        // Update existing
-                        if (colMap.name !== undefined) existing.name = rowData[colMap.name] || existing.name;
-                        if (colMap.cost !== undefined) existing.cost = parseFloat(rowData[colMap.cost]) || existing.cost;
-                        if (colMap.price !== undefined) existing.price = parseFloat(rowData[colMap.price]) || existing.price;
-                        if (colMap.quantity !== undefined) existing.quantity = parseInt(rowData[colMap.quantity]) || existing.quantity;
-                        if (colMap.location !== undefined) existing.location = rowData[colMap.location] || existing.location;
-                        if (colMap.hyperlink !== undefined) existing.hyperlink = rowData[colMap.hyperlink] || existing.hyperlink;
-                        if (colMap.notes !== undefined) {
-                            const noteText = rowData[colMap.notes];
-                            if (noteText) existing.notes.push({type: 'Product', text: noteText});
-                        }
+                        // Update all fields
+                        Object.assign(existing, productData);
                     } else {
-                        // Add new
-                        const product = {
-                            sku: sku,
-                            name: rowData[colMap.name] || '',
-                            cost: parseFloat(rowData[colMap.cost]) || 0,
-                            price: parseFloat(rowData[colMap.price]) || 0,
-                            quantity: parseInt(rowData[colMap.quantity]) || 0,
-                            location: rowData[colMap.location] || '',
-                            hyperlink: rowData[colMap.hyperlink] || '',
-                            notes: []
-                        };
-                        if (colMap.notes !== undefined && rowData[colMap.notes]) {
-                            product.notes.push({type: 'Product', text: rowData[colMap.notes]});
-                        }
-                        products.push(product);
+                        products.push(productData);
                         addedCount++;
                     }
                 }
@@ -605,7 +618,12 @@ function showInventory(sortByLocation = false) {
             const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
             for (let i = startIdx; i < endIdx; i++) {
                 const product = filteredProducts[i];
-                const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : '';
+                let hyperlink = '';
+                if (product.hyperlink && (product.hyperlink.startsWith('http://') || product.hyperlink.startsWith('https://'))) {
+                    hyperlink = `<a href="${product.hyperlink}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
+                } else if (product.hyperlink) {
+                    hyperlink = `<a href="https://${product.hyperlink}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
+                }
                 const notes = product.notes && Array.isArray(product.notes) ? product.notes.map(note => note.text).join('; ') : '';
                 const escapedSku = (product.sku || '').replace(/'/g, "\\'");
                 html += `

@@ -368,7 +368,7 @@ function showScanForm() {
         cameraStarting = true;
         await stopCamera();
         const barcodeArea = document.getElementById('barcodeArea');
-        barcodeArea.innerHTML = '<div id="reader" style="width:320px;max-width:100vw;"></div>';
+        barcodeArea.innerHTML = '<div id="reader" style="width:340px;max-width:100vw;"></div>';
         updateCameraStatus('Starting camera...', '#237804');
         if (!window.Html5Qrcode) {
             barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner library not loaded. Please check your internet connection and reload the page.</div>';
@@ -380,12 +380,13 @@ function showScanForm() {
             try { await html5Qr.stop(); } catch(e){}
         }
         html5Qr = new Html5Qrcode("reader");
+        let scanErrorTimeout = null;
         Html5Qrcode.getCameras().then(cameras => {
             if (cameras && cameras.length) {
                 updateCameraStatus('Camera found. Initializing scan...', '#237804');
                 html5Qr.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: 250 },
+                    { fps: 5, qrbox: 320 }, // less sensitive: lower fps, bigger box
                     async (decodedText, decodedResult) => {
                         updateCameraStatus('Barcode detected: ' + decodedText, '#237804');
                         document.getElementById('scanSku').value = decodedText;
@@ -394,7 +395,9 @@ function showScanForm() {
                     },
                     (errorMsg) => {
                         lastScanError = errorMsg;
+                        if (scanErrorTimeout) return; // prevent rapid error updates
                         updateCameraStatus('Scanning... (last error: ' + errorMsg + ')', 'orange');
+                        scanErrorTimeout = setTimeout(() => { scanErrorTimeout = null; }, 800); // 0.8s delay
                     }
                 ).then(() => { cameraActive = true; updateCameraStatus('Camera active. Point barcode at camera.', '#237804'); cameraStarting = false; })
                 .catch(err => {

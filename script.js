@@ -90,7 +90,7 @@ function saveData() {
 }
 
 function showUploadForm() {
-    mainContent.innerHTML = `
+    window.mainContent.innerHTML = `
         <h2>Upload Spreadsheet</h2>
         <form id="uploadForm" autocomplete="off" novalidate>
             <label for="fileInput" style="display:block;margin-bottom:1rem;font-weight:bold;">Choose Excel file (.xlsx, .xls):</label>
@@ -217,7 +217,7 @@ function uploadSpreadsheet(e) {
 }
 
 function showAddProductForm() {
-    mainContent.innerHTML = `
+    window.mainContent.innerHTML = `
         <h2>Add New Product</h2>
         <form id="addProductForm">
             <label for="sku">SKU:</label>
@@ -277,7 +277,7 @@ function editProduct(sku) {
     
     const notesText = product.notes.map(note => `${note.type}: ${note.text}`).join('\n');
     
-    mainContent.innerHTML = `
+    window.mainContent.innerHTML = `
         <h2>Edit Product</h2>
         <form id="editProductForm">
             <label for="editSku">SKU:</label>
@@ -338,7 +338,7 @@ function updateProduct(e, oldSku) {
 }
 
 function showScanForm() {
-    mainContent.innerHTML = `
+    window.mainContent.innerHTML = `
         <h2>Scan SKU (Barcode or Manual)</h2>
         <div style="color:#555;font-size:1em;margin-bottom:0.5em;">
             <b>Tip:</b> Place the barcode in the center of the box, hold steady, and ensure good lighting. For best results, use a clean camera lens and avoid glare.
@@ -624,7 +624,7 @@ function showInventory(sortByLocation = false) {
             }
             html += '</tbody></table>';
         }
-        mainContent.innerHTML = html;
+        window.mainContent.innerHTML = html;
         // Attach per-header search events
         setTimeout(() => {
             const searchFields = [
@@ -679,7 +679,7 @@ function showMakeSaleForm() {
             </form>
         `;
     }
-    mainContent.innerHTML = html;
+    window.mainContent.innerHTML = html;
     // Camera logic for Make Sale
     let saleQr = null;
     let saleCameraActive = false;

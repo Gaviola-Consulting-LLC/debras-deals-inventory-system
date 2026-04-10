@@ -416,8 +416,7 @@ function showScanForm() {
     document.getElementById('startCameraBtn').onclick = function() {
         startCamera();
     };
-    // Always reload scanner on tab open (fixes mobile issues)
-    setTimeout(() => { startCamera(); }, 500);
+    // Do not auto-start camera. Only start when user presses button.
     document.getElementById('scanForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const sku = document.getElementById('scanSku').value;

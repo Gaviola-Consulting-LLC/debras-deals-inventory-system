@@ -11,87 +11,80 @@
  */
 // Debra's Deals Inventory System
 
+// Data storage using localStorage
+let products = JSON.parse(localStorage.getItem('products')) || [];
+let sales = JSON.parse(localStorage.getItem('sales')) || [];
+let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
-window.addEventListener('DOMContentLoaded', function() {
-    // Data storage using localStorage
-    window.products = JSON.parse(localStorage.getItem('products')) || [];
-    window.sales = JSON.parse(localStorage.getItem('sales')) || [];
-    window.revenue = parseFloat(localStorage.getItem('revenue')) || 0;
+// Ensure products have new fields
+products = products.map(p => ({
+    sku: p.sku,
+    name: p.name,
+    cost: p.cost || 0,
+    price: p.price,
+    quantity: p.quantity,
+    location: p.location || '',
+    hyperlink: p.hyperlink || '',
+    notes: p.notes || [],
+    purchaseName: p.purchaseName || '',
+    purchaseSource: p.purchaseSource || ''
+}));
 
-    // Ensure products have new fields
-    window.products = window.products.map(p => ({
-        sku: p.sku,
-        name: p.name,
-        cost: p.cost || 0,
-        price: p.price,
-        quantity: p.quantity,
-        location: p.location || '',
-        hyperlink: p.hyperlink || '',
-        notes: p.notes || [],
-        purchaseName: p.purchaseName || '',
-        purchaseSource: p.purchaseSource || ''
-    }));
+// Ensure sales have pickedUp and profit
+sales = sales.map(s => ({
+    ...s,
+    pickedUp: s.pickedUp || false,
+    profit: s.profit !== undefined ? s.profit : ((s.price - (products.find(p => p.sku === s.sku)?.cost || 0)) * s.quantity)
+}));
 
-    // Ensure sales have pickedUp and profit
-    window.sales = window.sales.map(s => ({
-        ...s,
-        pickedUp: s.pickedUp || false,
-        profit: s.profit !== undefined ? s.profit : ((s.price - (window.products.find(p => p.sku === s.sku)?.cost || 0)) * s.quantity)
-    }));
+// Filtered sales for details view
+let filteredSales = sales;
+let isSortedByLocation = false;
+let filteredProducts = products;
+let inventoryPage = 1;
+const ITEMS_PER_PAGE = 100;
+// Patch: Expose pagination functions globally so HTML buttons work
+window.nextInventoryPage = function() {
+    inventoryPage++;
+    showInventory(isSortedByLocation);
+};
+window.prevInventoryPage = function() {
+    inventoryPage--;
+    showInventory(isSortedByLocation);
+};
 
-    // Filtered sales for details view
-    window.filteredSales = window.sales;
-    window.isSortedByLocation = false;
-    window.filteredProducts = window.products;
-    window.inventoryPage = 1;
-    window.ITEMS_PER_PAGE = 100;
+// DOM elements
+const mainContent = document.getElementById('mainContent');
+const uploadSpreadsheetBtn = document.getElementById('uploadSpreadsheetBtn');
+const addProductBtn = document.getElementById('addProductBtn');
+const viewInventoryBtn = document.getElementById('viewInventoryBtn');
+const scanSkuBtn = document.getElementById('scanSkuBtn');
+const makeSaleBtn = document.getElementById('makeSaleBtn');
+const salesSummaryBtn = document.getElementById('salesSummaryBtn');
+const salesDetailsBtn = document.getElementById('salesDetailsBtn');
 
-    // Patch: Expose pagination functions globally so HTML buttons work
-    window.nextInventoryPage = function() {
-        window.inventoryPage++;
-        showInventory(window.isSortedByLocation);
-    };
-    window.prevInventoryPage = function() {
-        window.inventoryPage--;
-        showInventory(window.isSortedByLocation);
-    };
-
-    // DOM elements
-    const mainContent = document.getElementById('mainContent');
-    window.mainContent = mainContent; // expose globally if needed
-    const uploadSpreadsheetBtn = document.getElementById('uploadSpreadsheetBtn');
-    const addProductBtn = document.getElementById('addProductBtn');
-    const viewInventoryBtn = document.getElementById('viewInventoryBtn');
-    const scanSkuBtn = document.getElementById('scanSkuBtn');
-    const makeSaleBtn = document.getElementById('makeSaleBtn');
-    const salesSummaryBtn = document.getElementById('salesSummaryBtn');
-    const salesDetailsBtn = document.getElementById('salesDetailsBtn');
-
-    if (uploadSpreadsheetBtn) uploadSpreadsheetBtn.addEventListener('click', showUploadForm);
-    if (addProductBtn) addProductBtn.addEventListener('click', showAddProductForm);
-    if (viewInventoryBtn) viewInventoryBtn.addEventListener('click', showInventory);
-    if (scanSkuBtn) scanSkuBtn.addEventListener('click', showScanForm);
-    if (makeSaleBtn) makeSaleBtn.addEventListener('click', showMakeSaleForm);
-    if (salesSummaryBtn) salesSummaryBtn.addEventListener('click', showSalesSummary);
-    if (salesDetailsBtn) salesDetailsBtn.addEventListener('click', showSalesDetails);
-
-    // Optionally, show inventory on load
-    showInventory();
-});
+// Event listeners
+uploadSpreadsheetBtn.addEventListener('click', showUploadForm);
+addProductBtn.addEventListener('click', showAddProductForm);
+viewInventoryBtn.addEventListener('click', showInventory);
+scanSkuBtn.addEventListener('click', showScanForm);
+makeSaleBtn.addEventListener('click', showMakeSaleForm);
+salesSummaryBtn.addEventListener('click', showSalesSummary);
+salesDetailsBtn.addEventListener('click', showSalesDetails);
 
 // Functions
 function saveData() {
     try {
-        localStorage.setItem('products', JSON.stringify(window.products));
-        localStorage.setItem('sales', JSON.stringify(window.sales));
-        localStorage.setItem('revenue', window.revenue.toString());
+        localStorage.setItem('products', JSON.stringify(products));
+        localStorage.setItem('sales', JSON.stringify(sales));
+        localStorage.setItem('revenue', revenue.toString());
     } catch (e) {
         alert('Failed to save data: ' + e.message + '. Data may not persist.');
     }
 }
 
 function showUploadForm() {
-    window.mainContent.innerHTML = `
+    mainContent.innerHTML = `
         <h2>Upload Spreadsheet</h2>
         <form id="uploadForm" autocomplete="off" novalidate>
             <label for="fileInput" style="display:block;margin-bottom:1rem;font-weight:bold;">Choose Excel file (.xlsx, .xls):</label>
@@ -174,7 +167,7 @@ function uploadSpreadsheet(e) {
                     }
                     const sku = rowData[colMap.sku];
                     if (!sku) continue; // Skip rows without SKU
-                    const existing = window.products.find(p => p.sku === sku);
+                    const existing = products.find(p => p.sku === sku);
                     if (existing) {
                         // Update existing
                         if (colMap.name !== undefined) existing.name = rowData[colMap.name] || existing.name;
@@ -202,7 +195,7 @@ function uploadSpreadsheet(e) {
                         if (colMap.notes !== undefined && rowData[colMap.notes]) {
                             product.notes.push({type: 'Product', text: rowData[colMap.notes]});
                         }
-                        window.products.push(product);
+                        products.push(product);
                         addedCount++;
                     }
                 }
@@ -218,7 +211,7 @@ function uploadSpreadsheet(e) {
 }
 
 function showAddProductForm() {
-    window.mainContent.innerHTML = `
+    mainContent.innerHTML = `
         <h2>Add New Product</h2>
         <form id="addProductForm">
             <label for="sku">SKU:</label>
@@ -261,24 +254,24 @@ function addProduct(e) {
     const purchaseSource = document.getElementById('purchaseSource').value;
     const notesText = document.getElementById('notes').value;
     // Check if SKU already exists
-    if (window.products.find(p => p.sku === sku)) {
+    if (products.find(p => p.sku === sku)) {
         alert('SKU already exists!');
         return;
     }
     const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-    window.products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
     saveData();
     alert('Product added successfully!');
     showInventory();
 }
 
 function editProduct(sku) {
-    const product = window.products.find(p => p.sku === sku);
+    const product = products.find(p => p.sku === sku);
     if (!product) return;
     
     const notesText = product.notes.map(note => `${note.type}: ${note.text}`).join('\n');
     
-    window.mainContent.innerHTML = `
+    mainContent.innerHTML = `
         <h2>Edit Product</h2>
         <form id="editProductForm">
             <label for="editSku">SKU:</label>
@@ -321,10 +314,10 @@ function updateProduct(e, oldSku) {
     const purchaseName = document.getElementById('editPurchaseName').value;
     const purchaseSource = document.getElementById('editPurchaseSource').value;
     const notesText = document.getElementById('editNotes').value;
-    const productIndex = window.products.findIndex(p => p.sku === oldSku);
+    const productIndex = products.findIndex(p => p.sku === oldSku);
     if (productIndex === -1) return;
     // Check if new SKU already exists (if changed)
-    if (newSku !== oldSku && window.products.find(p => p.sku === newSku)) {
+    if (newSku !== oldSku && products.find(p => p.sku === newSku)) {
         alert('SKU already exists!');
         return;
     }
@@ -332,14 +325,14 @@ function updateProduct(e, oldSku) {
         const [type, ...textParts] = line.split(': ');
         return {type: type || 'Product', text: textParts.join(': ') || line};
     }).filter(note => note.text.trim());
-    window.products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
+    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
     saveData();
     alert('Product updated successfully!');
     showInventory();
 }
 
 function showScanForm() {
-    window.mainContent.innerHTML = `
+    mainContent.innerHTML = `
         <h2>Scan SKU (Barcode or Manual)</h2>
         <div style="color:#555;font-size:1em;margin-bottom:0.5em;">
             <b>Tip:</b> Place the barcode in the center of the box, hold steady, and ensure good lighting. For best results, use a clean camera lens and avoid glare.
@@ -436,7 +429,7 @@ function showScanForm() {
         handleScanSku(sku);
     });
     function handleScanSku(sku) {
-        const product = window.products.find(p => p.sku === sku);
+        const product = products.find(p => p.sku === sku);
         const scanResult = document.getElementById('scanResult');
         if (!product) {
             // Show add product form with SKU pre-filled
@@ -468,12 +461,12 @@ function showScanForm() {
                 const purchaseName = document.getElementById('newPurchaseName').value;
                 const purchaseSource = document.getElementById('newPurchaseSource').value;
                 const notesText = document.getElementById('newNotes').value;
-                if (window.products.find(p => p.sku === sku)) {
+                if (products.find(p => p.sku === sku)) {
                     alert('SKU already exists!');
                     return;
                 }
                 const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-                window.products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+                products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
                 saveData();
                 scanResult.innerHTML = `<span style='color:green;'>Product added successfully!</span>`;
                 showInventory();
@@ -495,9 +488,9 @@ function showScanForm() {
             product.quantity -= 1;
             // Record sale
             const saleAmount = product.price;
-            window.revenue += saleAmount;
+            revenue += saleAmount;
             const profit = (product.price - product.cost) * 1;
-            window.sales.push({
+            sales.push({
                 sku: product.sku,
                 name: product.name,
                 quantity: 1,
@@ -517,7 +510,7 @@ function showScanForm() {
 function scanSku(e) {
     e.preventDefault();
     const sku = document.getElementById('scanSku').value;
-    const product = window.products.find(p => p.sku === sku);
+    const product = products.find(p => p.sku === sku);
     if (!product) {
         alert('Product not found!');
         return;
@@ -532,9 +525,9 @@ function scanSku(e) {
     
     // Record sale
     const saleAmount = product.price;
-    window.revenue += saleAmount;
+    revenue += saleAmount;
     const profit = (product.price - product.cost) * 1;
-    window.sales.push({
+    sales.push({
         sku: product.sku,
         name: product.name,
         quantity: 1,
@@ -553,49 +546,50 @@ function scanSku(e) {
 function showInventory(sortByLocation = false) {
     try {
         if (sortByLocation) {
-            window.filteredProducts.sort((a, b) => (a.location || '').toLowerCase().localeCompare((b.location || '').toLowerCase()));
+            filteredProducts.sort((a, b) => (a.location || '').toLowerCase().localeCompare((b.location || '').toLowerCase()));
         }
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="keywordSearch" placeholder="Search (min 2 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
         // Pagination controls
-        const totalPages = Math.ceil(window.filteredProducts.length / window.ITEMS_PER_PAGE) || 1;
-        if (window.inventoryPage > totalPages) window.inventoryPage = totalPages;
-        if (window.inventoryPage < 1) window.inventoryPage = 1;
-        if (window.filteredProducts.length > window.ITEMS_PER_PAGE) {
-            html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${window.inventoryPage}</span> of ${totalPages} ` +
-                `<button onclick='prevInventoryPage()' ${window.inventoryPage === 1 ? 'disabled' : ''}>&lt; Prev</button> ` +
-                `<button onclick='nextInventoryPage()' ${window.inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
+        const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
+        if (inventoryPage > totalPages) inventoryPage = totalPages;
+        if (inventoryPage < 1) inventoryPage = 1;
+        if (filteredProducts.length > ITEMS_PER_PAGE) {
+            html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${inventoryPage}</span> of ${totalPages} ` +
+                `<button onclick='prevInventoryPage()' ${inventoryPage === 1 ? 'disabled' : ''}>&lt; Prev</button> ` +
+                `<button onclick='nextInventoryPage()' ${inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
         }
-        if (window.filteredProducts.length === 0) {
+        if (filteredProducts.length === 0) {
             html += '<p>No products match the search.</p>';
         } else {
             html += `
                 <table>
                     <thead>
                         <tr>
-                            <th>SKU<br><input type="text" id="searchSku" style="width:90px;" placeholder="Search"></th>
-                            <th>Name<br><input type="text" id="searchName" style="width:90px;" placeholder="Search"></th>
-                            <th>Cost<br><input type="text" id="searchCost" style="width:60px;" placeholder="Search"></th>
-                            <th>Price<br><input type="text" id="searchPrice" style="width:60px;" placeholder="Search"></th>
-                            <th>Quantity<br><input type="text" id="searchQuantity" style="width:60px;" placeholder="Search"></th>
-                            <th>Location<br><input type="text" id="searchLocation" style="width:90px;" placeholder="Search"></th>
-                            <th>Purchase Name<br><input type="text" id="searchPurchaseName" style="width:90px;" placeholder="Search"></th>
-                            <th>Source of Purchase<br><input type="text" id="searchPurchaseSource" style="width:90px;" placeholder="Search"></th>
-                            <th>Hyperlink<br><input type="text" id="searchHyperlink" style="width:90px;" placeholder="Search"></th>
-                            <th>Notes<br><input type="text" id="searchNotes" style="width:90px;" placeholder="Search"></th>
+                            <th>SKU</th>
+                            <th>Name</th>
+                            <th>Cost</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Location</th>
+                            <th>Purchase Name</th>
+                            <th>Source of Purchase</th>
+                            <th>Hyperlink</th>
+                            <th>Notes</th>
                             <th>Availability</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
-            const startIdx = (window.inventoryPage - 1) * window.ITEMS_PER_PAGE;
-            const endIdx = Math.min(startIdx + window.ITEMS_PER_PAGE, window.filteredProducts.length);
+            const startIdx = (inventoryPage - 1) * ITEMS_PER_PAGE;
+            const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
             for (let i = startIdx; i < endIdx; i++) {
-                const product = window.filteredProducts[i];
+                const product = filteredProducts[i];
                 const availability = product.quantity > 0 ? 'Available' : 'Out of Stock';
                 const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : 'No Link';
                 let nameDisplay = product.name || '';
@@ -626,10 +620,9 @@ function showInventory(sortByLocation = false) {
             }
             html += '</tbody></table>';
         }
-        window.mainContent.innerHTML = html;
-        // Attach global and per-header search events
+        mainContent.innerHTML = html;
+        // Attach search events
         setTimeout(() => {
-            // Global search
             const kwInput = document.getElementById('keywordSearch');
             const kwBtn = document.getElementById('keywordSearchBtn');
             if (kwInput) {
@@ -638,27 +631,44 @@ function showInventory(sortByLocation = false) {
             if (kwBtn) {
                 kwBtn.onclick = filterByKeyword;
             }
-            // Per-header search
-            const searchFields = [
-                { id: 'searchSku', key: 'sku' },
-                { id: 'searchName', key: 'name' },
-                { id: 'searchCost', key: 'cost' },
-                { id: 'searchPrice', key: 'price' },
-                { id: 'searchQuantity', key: 'quantity' },
-                { id: 'searchLocation', key: 'location' },
-                { id: 'searchPurchaseName', key: 'purchaseName' },
-                { id: 'searchPurchaseSource', key: 'purchaseSource' },
-                { id: 'searchHyperlink', key: 'hyperlink' },
-                { id: 'searchNotes', key: 'notes' }
-            ];
-            searchFields.forEach(field => {
-                const input = document.getElementById(field.id);
-                if (input) {
-                    input.addEventListener('input', filterByHeader);
-                }
-            });
         }, 0);
-    // Pagination controls remain here if needed
+    // Advanced search by any field, min 3 letters
+    function filterByKeyword() {
+        const input = document.getElementById('keywordSearch');
+        if (!input) return;
+        const term = input.value.trim().toLowerCase();
+        if (term.length < 3) {
+            alert('Enter at least 3 letters to search.');
+            return;
+        }
+        filteredProducts = products.filter(p => {
+            return Object.keys(p).some(key => {
+                let val = p[key];
+                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
+                if (Array.isArray(val)) {
+                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
+                }
+                return false;
+            });
+        });
+        inventoryPage = 1;
+        showInventory(isSortedByLocation);
+    }
+    function clearKeywordSearch() {
+        const input = document.getElementById('keywordSearch');
+        if (input) input.value = '';
+        filteredProducts = products;
+        inventoryPage = 1;
+        showInventory(isSortedByLocation);
+    }
+    // Pagination controls
+    function nextInventoryPage() {
+        inventoryPage++;
+        showInventory(isSortedByLocation);
+    }
+    function prevInventoryPage() {
+        inventoryPage--;
+        showInventory(isSortedByLocation);
     }
     } catch (error) {
         alert('Error displaying inventory: ' + error.message);
@@ -667,7 +677,7 @@ function showInventory(sortByLocation = false) {
 
 function showMakeSaleForm() {
     let html = '<h2>Make a Sale</h2>';
-    if (window.products.length === 0) {
+    if (products.length === 0) {
         html += '<p>No products available for sale.</p>';
     } else {
         html += `
@@ -678,7 +688,7 @@ function showMakeSaleForm() {
                 <select id="productSelect" required>
                     <option value="">Choose a product</option>
         `;
-        window.products.forEach((product, index) => {
+        products.forEach((product, index) => {
             if (product.quantity > 0) {
                 html += `<option value="${index}">${product.name} (SKU: ${product.sku}) - $${product.price.toFixed(2)} (${product.quantity} available)</option>`;
             }
@@ -691,7 +701,7 @@ function showMakeSaleForm() {
             </form>
         `;
     }
-    window.mainContent.innerHTML = html;
+    mainContent.innerHTML = html;
     // Camera logic for Make Sale
     let saleQr = null;
     let saleCameraActive = false;
@@ -723,34 +733,39 @@ function showMakeSaleForm() {
                                 barcodeArea.innerHTML = `<span style='color:red;'>SKU not found or out of stock: ${decodedText}</span>`;
                             }
                         },
-                        setTimeout(() => {
-                            const kwInput = document.getElementById('keywordSearch');
-                            const kwBtn = document.getElementById('keywordSearchBtn');
-                            if (kwInput) {
-                                kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
-                            }
-                            if (kwBtn) {
-                                kwBtn.onclick = filterByKeyword;
-                            }
-                        }, 0);
-                        // Advanced search by any field, min 2 letters
-                        function filterByKeyword() {
-                            const input = document.getElementById('keywordSearch');
-                            if (!input) return;
-                            const term = input.value.trim().toLowerCase();
-                            if (term.length < 2) {
-                                filteredProducts = products;
-                                showInventory(isSortedByLocation);
-                                return;
-                            }
-                            filteredProducts = products.filter(p => {
-                                return [
-                                    p.sku, p.name, p.cost, p.price, p.quantity, p.location, p.purchaseName, p.purchaseSource, p.hyperlink,
-                                    ...(Array.isArray(p.notes) ? p.notes.map(n => n.text) : [])
-                                ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
-                            });
-                            showInventory(isSortedByLocation);
-                        }
+                        (errorMsg) => {}
+                    ).then(() => { saleCameraActive = true; })
+                    .catch(err => {
+                        barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
+                    });
+                } else {
+                    barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
+                }
+            }).catch(err => {
+                barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
+            });
+        } else {
+            barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner not loaded.</div>';
+        }
+    });
+    if (products.some(p => p.quantity > 0)) {
+        document.getElementById('makeSaleForm').addEventListener('submit', makeSale);
+    }
+}
+
+function makeSale(e) {
+    e.preventDefault();
+    const productIndex = parseInt(document.getElementById('productSelect').value);
+    const quantity = parseInt(document.getElementById('saleQuantity').value);
+    
+    const product = products[productIndex];
+    if (quantity > product.quantity) {
+        alert('Not enough quantity in stock!');
+        return;
+    }
+    
+    // Deduct from inventory
+    product.quantity -= quantity;
     
     // Record sale
     const saleAmount = product.price * quantity;
@@ -811,7 +826,6 @@ function showSalesDetails() {
             <button onclick="clearFilter()">Clear Filter</button>
         </div>
     `;
-    html += `<input type="text" id="salesKeywordSearch" placeholder="Search (min 2 letters, any field)" style="width:220px;max-width:80vw;"> <button id="salesKeywordSearchBtn">Search</button> <button onclick="clearSalesKeywordSearch()">Clear</button> `;
     if (filteredSales.length === 0) {
         html += '<p>No sales recorded yet.</p>';
     } else {
@@ -849,16 +863,6 @@ function showSalesDetails() {
         });
         html += '</tbody></table>';
     }
-    setTimeout(() => {
-        const kwInput = document.getElementById('salesKeywordSearch');
-        const kwBtn = document.getElementById('salesKeywordSearchBtn');
-        if (kwInput) {
-            kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterSalesByKeyword(); });
-        }
-        if (kwBtn) {
-            kwBtn.onclick = filterSalesByKeyword;
-        }
-    }, 0);
     mainContent.innerHTML = html;
 }
 
@@ -911,3 +915,4 @@ function togglePickedUp(index) {
 }
 
 // Initialize with inventory view
+showInventory();

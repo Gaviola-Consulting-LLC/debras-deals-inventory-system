@@ -570,17 +570,22 @@ function showInventory(sortByLocation = false) {
                 <table>
                     <thead>
                         <tr>
+                            <th>Condition</th>
+                            <th>Desc/PU Date</th>
+                            <th>ASIN</th>
+                            <th>Item Title</th>
+                            <th>Qty</th>
+                            <th>Item Price</th>
+                            <th>Total Price</th>
                             <th>SKU</th>
-                            <th>Name</th>
-                            <th>Cost</th>
-                            <th>Price</th>
-                            <th>Quantity</th>
-                            <th>Location</th>
-                            <th>Purchase Name</th>
-                            <th>Source of Purchase</th>
-                            <th>Hyperlink</th>
+                            <th>Loc</th>
+                            <th>List Date</th>
+                            <th>Sold Date</th>
+                            <th>Retail</th>
+                            <th>Sold For</th>
+                            <th>Profit</th>
                             <th>Notes</th>
-                            <th>Availability</th>
+                            <th>Link</th>
                             <th>Actions</th>
                         </tr>
                     </thead>

@@ -11,51 +11,52 @@
  */
 // Debra's Deals Inventory System
 
-// Data storage using localStorage
-let products = JSON.parse(localStorage.getItem('products')) || [];
-let sales = JSON.parse(localStorage.getItem('sales')) || [];
-let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
-// Ensure products have new fields
-products = products.map(p => ({
-    sku: p.sku,
-    name: p.name,
-    cost: p.cost || 0,
-    price: p.price,
-    quantity: p.quantity,
-    location: p.location || '',
-    hyperlink: p.hyperlink || '',
-    notes: p.notes || [],
-    purchaseName: p.purchaseName || '',
-    purchaseSource: p.purchaseSource || ''
-}));
-
-// Ensure sales have pickedUp and profit
-sales = sales.map(s => ({
-    ...s,
-    pickedUp: s.pickedUp || false,
-    profit: s.profit !== undefined ? s.profit : ((s.price - (products.find(p => p.sku === s.sku)?.cost || 0)) * s.quantity)
-}));
-
-// Filtered sales for details view
-let filteredSales = sales;
-let isSortedByLocation = false;
-let filteredProducts = products;
-let inventoryPage = 1;
-const ITEMS_PER_PAGE = 100;
-// Patch: Expose pagination functions globally so HTML buttons work
-window.nextInventoryPage = function() {
-    inventoryPage++;
-    showInventory(isSortedByLocation);
-};
-window.prevInventoryPage = function() {
-    inventoryPage--;
-    showInventory(isSortedByLocation);
-};
-
-
-// DOMContentLoaded: ensure DOM is ready before querying elements and attaching listeners
 window.addEventListener('DOMContentLoaded', function() {
+    // Data storage using localStorage
+    window.products = JSON.parse(localStorage.getItem('products')) || [];
+    window.sales = JSON.parse(localStorage.getItem('sales')) || [];
+    window.revenue = parseFloat(localStorage.getItem('revenue')) || 0;
+
+    // Ensure products have new fields
+    window.products = window.products.map(p => ({
+        sku: p.sku,
+        name: p.name,
+        cost: p.cost || 0,
+        price: p.price,
+        quantity: p.quantity,
+        location: p.location || '',
+        hyperlink: p.hyperlink || '',
+        notes: p.notes || [],
+        purchaseName: p.purchaseName || '',
+        purchaseSource: p.purchaseSource || ''
+    }));
+
+    // Ensure sales have pickedUp and profit
+    window.sales = window.sales.map(s => ({
+        ...s,
+        pickedUp: s.pickedUp || false,
+        profit: s.profit !== undefined ? s.profit : ((s.price - (window.products.find(p => p.sku === s.sku)?.cost || 0)) * s.quantity)
+    }));
+
+    // Filtered sales for details view
+    window.filteredSales = window.sales;
+    window.isSortedByLocation = false;
+    window.filteredProducts = window.products;
+    window.inventoryPage = 1;
+    window.ITEMS_PER_PAGE = 100;
+
+    // Patch: Expose pagination functions globally so HTML buttons work
+    window.nextInventoryPage = function() {
+        window.inventoryPage++;
+        showInventory(window.isSortedByLocation);
+    };
+    window.prevInventoryPage = function() {
+        window.inventoryPage--;
+        showInventory(window.isSortedByLocation);
+    };
+
+    // DOM elements
     const mainContent = document.getElementById('mainContent');
     window.mainContent = mainContent; // expose globally if needed
     const uploadSpreadsheetBtn = document.getElementById('uploadSpreadsheetBtn');

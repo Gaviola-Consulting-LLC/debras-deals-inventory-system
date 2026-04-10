@@ -53,24 +53,30 @@ window.prevInventoryPage = function() {
     showInventory(isSortedByLocation);
 };
 
-// DOM elements
-const mainContent = document.getElementById('mainContent');
-const uploadSpreadsheetBtn = document.getElementById('uploadSpreadsheetBtn');
-const addProductBtn = document.getElementById('addProductBtn');
-const viewInventoryBtn = document.getElementById('viewInventoryBtn');
-const scanSkuBtn = document.getElementById('scanSkuBtn');
-const makeSaleBtn = document.getElementById('makeSaleBtn');
-const salesSummaryBtn = document.getElementById('salesSummaryBtn');
-const salesDetailsBtn = document.getElementById('salesDetailsBtn');
 
-// Event listeners
-uploadSpreadsheetBtn.addEventListener('click', showUploadForm);
-addProductBtn.addEventListener('click', showAddProductForm);
-viewInventoryBtn.addEventListener('click', showInventory);
-scanSkuBtn.addEventListener('click', showScanForm);
-makeSaleBtn.addEventListener('click', showMakeSaleForm);
-salesSummaryBtn.addEventListener('click', showSalesSummary);
-salesDetailsBtn.addEventListener('click', showSalesDetails);
+// DOMContentLoaded: ensure DOM is ready before querying elements and attaching listeners
+window.addEventListener('DOMContentLoaded', function() {
+    const mainContent = document.getElementById('mainContent');
+    window.mainContent = mainContent; // expose globally if needed
+    const uploadSpreadsheetBtn = document.getElementById('uploadSpreadsheetBtn');
+    const addProductBtn = document.getElementById('addProductBtn');
+    const viewInventoryBtn = document.getElementById('viewInventoryBtn');
+    const scanSkuBtn = document.getElementById('scanSkuBtn');
+    const makeSaleBtn = document.getElementById('makeSaleBtn');
+    const salesSummaryBtn = document.getElementById('salesSummaryBtn');
+    const salesDetailsBtn = document.getElementById('salesDetailsBtn');
+
+    if (uploadSpreadsheetBtn) uploadSpreadsheetBtn.addEventListener('click', showUploadForm);
+    if (addProductBtn) addProductBtn.addEventListener('click', showAddProductForm);
+    if (viewInventoryBtn) viewInventoryBtn.addEventListener('click', showInventory);
+    if (scanSkuBtn) scanSkuBtn.addEventListener('click', showScanForm);
+    if (makeSaleBtn) makeSaleBtn.addEventListener('click', showMakeSaleForm);
+    if (salesSummaryBtn) salesSummaryBtn.addEventListener('click', showSalesSummary);
+    if (salesDetailsBtn) salesDetailsBtn.addEventListener('click', showSalesDetails);
+
+    // Optionally, show inventory on load
+    showInventory();
+});
 
 // Functions
 function saveData() {

@@ -62,19 +62,28 @@ function saveData() {
 function showUploadForm() {
     mainContent.innerHTML = `
         <h2>Upload Spreadsheet</h2>
-        <form id="uploadForm">
+        <form id="uploadForm" autocomplete="off" novalidate>
             <label for="fileInput" style="display:block;margin-bottom:1rem;font-weight:bold;">Choose Excel file (.xlsx, .xls):</label>
-            <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required style="font-size:1.1rem;padding:0.5rem;width:100%;max-width:350px;" capture>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required style="font-size:1.1rem;padding:0.5rem;width:100%;max-width:350px;" />
             <button type="submit" style="margin-top:1rem;">Upload and Import</button>
         </form>
         <div id="iosHint" style="margin-top:1rem;color:#555;font-size:0.95rem;">If you have trouble selecting a file on iPhone/iPad, make sure the file is saved in your Files app (not iCloud Drive only), then try again. Safari and Chrome on iOS are supported.</div>
     `;
-    // iOS fix: ensure input is clickable and resets value
+    // Always open file picker, never camera
     const fileInput = document.getElementById('fileInput');
+    fileInput.removeAttribute('capture');
+    fileInput.setAttribute('tabindex', '0');
     fileInput.addEventListener('click', function(e) {
         fileInput.value = '';
     });
-    document.getElementById('uploadForm').addEventListener('submit', uploadSpreadsheet);
+    // Remove all validation messages on submit
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        if (window && window.document) {
+            const forms = document.querySelectorAll('form');
+            forms.forEach(f => f.noValidate = true);
+        }
+        uploadSpreadsheet(e);
+    });
 }
 
 function uploadSpreadsheet(e) {

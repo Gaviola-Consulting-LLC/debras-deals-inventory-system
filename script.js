@@ -1,3 +1,14 @@
+/*
+ * Intellectual Property Ownership:
+ * The Software, including but not limited to its object code, source code, visual expressions, screen displays, graphics, design, and underlying algorithms, is the sole and exclusive property of Gaviola Consulting, LLC.
+ * All right, title, and interest in and to the Software, including all associated Intellectual Property Rights (including, without limitation, copyrights, trademarks, and trade secrets), shall at all times remain vested in Gaviola Consulting, LLC. No license, lease, or sale of the software to any third party shall be construed as a transfer of ownership.
+ *
+ * Usage Restrictions (The "No Reverse Engineering" Clause):
+ * Users are strictly prohibited from:
+ * - Modifying, copying, or creating derivative works based on the Software.
+ * - Reverse engineering, decompiling, or disassembling the code.
+ * - Removing or altering any copyright or proprietary notices belonging to Gaviola Consulting, LLC.
+ */
 // Debra's Deals Inventory System
 
 // Data storage using localStorage
@@ -458,7 +469,7 @@ function showInventory(sortByLocation = false) {
         }
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button onclick="filterByKeyword()">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
         html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
@@ -532,8 +543,12 @@ function showInventory(sortByLocation = false) {
         // Attach search events
         setTimeout(() => {
             const kwInput = document.getElementById('keywordSearch');
+            const kwBtn = document.getElementById('keywordSearchBtn');
             if (kwInput) {
                 kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
+            }
+            if (kwBtn) {
+                kwBtn.onclick = filterByKeyword;
             }
         }, 0);
     // Advanced search by any field, min 3 letters

@@ -335,6 +335,7 @@ function showScanForm() {
     mainContent.innerHTML = `
         <h2>Scan SKU (Barcode or Manual)</h2>
         <div id="barcodeArea" style="margin-bottom:1rem;"></div>
+        <div id="cameraStatus" style="color:#237804;font-size:1em;margin-bottom:0.5em;"></div>
         <button id="startCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
         <form id="scanForm">
             <label for="scanSku">Enter or Scan SKU:</label>
@@ -345,38 +346,71 @@ function showScanForm() {
     `;
     let html5Qr = null;
     let cameraActive = false;
-    function startCamera() {
+    let lastScanError = '';
+    let cameraStarting = false;
+    async function stopCamera() {
+        if (html5Qr && cameraActive) {
+            try {
+                await html5Qr.stop();
+            } catch (e) {}
+            cameraActive = false;
+        }
+    }
+    function updateCameraStatus(msg, color) {
+        const statusDiv = document.getElementById('cameraStatus');
+        if (statusDiv) {
+            statusDiv.textContent = msg;
+            statusDiv.style.color = color || '#237804';
+        }
+    }
+    async function startCamera() {
+        if (cameraStarting) return;
+        cameraStarting = true;
+        await stopCamera();
         const barcodeArea = document.getElementById('barcodeArea');
         barcodeArea.innerHTML = '<div id="reader" style="width:320px;max-width:100vw;"></div>';
+        updateCameraStatus('Starting camera...', '#237804');
         if (!window.Html5Qrcode) {
             barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner library not loaded. Please check your internet connection and reload the page.</div>';
+            updateCameraStatus('Barcode scanner library not loaded.', 'red');
+            cameraStarting = false;
             return;
         }
         if (html5Qr) {
-            try { html5Qr.stop(); } catch(e){}
+            try { await html5Qr.stop(); } catch(e){}
         }
         html5Qr = new Html5Qrcode("reader");
         Html5Qrcode.getCameras().then(cameras => {
             if (cameras && cameras.length) {
+                updateCameraStatus('Camera found. Initializing scan...', '#237804');
                 html5Qr.start(
                     { facingMode: "environment" },
                     { fps: 10, qrbox: 250 },
-                    (decodedText, decodedResult) => {
+                    async (decodedText, decodedResult) => {
+                        updateCameraStatus('Barcode detected: ' + decodedText, '#237804');
                         document.getElementById('scanSku').value = decodedText;
-                        html5Qr.stop();
-                        cameraActive = false;
+                        await stopCamera();
                         handleScanSku(decodedText);
                     },
-                    (errorMsg) => {}
-                ).then(() => { cameraActive = true; })
+                    (errorMsg) => {
+                        lastScanError = errorMsg;
+                        updateCameraStatus('Scanning... (last error: ' + errorMsg + ')', 'orange');
+                    }
+                ).then(() => { cameraActive = true; updateCameraStatus('Camera active. Point barcode at camera.', '#237804'); cameraStarting = false; })
                 .catch(err => {
                     barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
+                    updateCameraStatus('Camera error: ' + err, 'red');
+                    cameraStarting = false;
                 });
             } else {
                 barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
+                updateCameraStatus('No camera found.', 'red');
+                cameraStarting = false;
             }
         }).catch(err => {
             barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
+            updateCameraStatus('Camera access denied.', 'red');
+            cameraStarting = false;
         });
     }
     document.getElementById('startCameraBtn').onclick = function() {

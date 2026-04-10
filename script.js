@@ -346,9 +346,15 @@ function showScanForm() {
     let html5Qr = null;
     let cameraActive = false;
     function startCamera() {
-        if (!window.Html5Qrcode) return;
         const barcodeArea = document.getElementById('barcodeArea');
         barcodeArea.innerHTML = '<div id="reader" style="width:320px;max-width:100vw;"></div>';
+        if (!window.Html5Qrcode) {
+            barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner library not loaded. Please check your internet connection and reload the page.</div>';
+            return;
+        }
+        if (html5Qr) {
+            try { html5Qr.stop(); } catch(e){}
+        }
         html5Qr = new Html5Qrcode("reader");
         Html5Qrcode.getCameras().then(cameras => {
             if (cameras && cameras.length) {
@@ -376,10 +382,8 @@ function showScanForm() {
     document.getElementById('startCameraBtn').onclick = function() {
         startCamera();
     };
-    // Optionally auto-start camera on mobile
-    if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        setTimeout(() => { startCamera(); }, 500);
-    }
+    // Always reload scanner on tab open (fixes mobile issues)
+    setTimeout(() => { startCamera(); }, 500);
     document.getElementById('scanForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const sku = document.getElementById('scanSku').value;

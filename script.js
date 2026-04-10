@@ -103,29 +103,21 @@ function uploadSpreadsheet(e) {
     e.preventDefault();
     const file = document.getElementById('fileInput').files[0];
     if (!file) {
-        alert('No file selected.');
+        // No file selected, do nothing
         return;
     }
-    
-    alert('Processing file: ' + file.name);
-    
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
-            alert('File read successfully, parsing...');
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
             const sheetNames = workbook.SheetNames;
-            alert('Sheets found: ' + sheetNames.join(', '));
-            
             let totalAdded = 0;
             sheetNames.forEach(sheetName => {
-                alert('Processing sheet: ' + sheetName);
                 const worksheet = workbook.Sheets[sheetName];
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 const maxRow = range.e.r;
                 const maxCol = range.e.c;
-                
                 // Get headers from row 0
                 const headers = [];
                 for (let c = 0; c <= maxCol; c++) {
@@ -133,9 +125,6 @@ function uploadSpreadsheet(e) {
                     const cell = worksheet[cellAddr];
                     headers.push(cell ? String(cell.v || '') : '');
                 }
-                
-                alert('Headers in ' + sheetName + ': ' + headers.join(', '));
-                
                 // Map columns
                 const colMap = {};
                 headers.forEach((header, index) => {
@@ -151,9 +140,6 @@ function uploadSpreadsheet(e) {
                         else if (h.includes('notes')) colMap.notes = index;
                     }
                 });
-                
-                alert('Mapped columns in ' + sheetName + ': ' + JSON.stringify(colMap));
-                
                 let addedCount = 0;
                 // Data from row 1 onwards
                 for (let r = 1; r <= maxRow; r++) {
@@ -168,10 +154,8 @@ function uploadSpreadsheet(e) {
                         }
                         rowData[c] = value;
                     }
-                    
                     const sku = rowData[colMap.sku];
                     if (!sku) continue; // Skip rows without SKU
-                    
                     const existing = products.find(p => p.sku === sku);
                     if (existing) {
                         // Update existing
@@ -204,15 +188,9 @@ function uploadSpreadsheet(e) {
                         addedCount++;
                     }
                 }
-                
-                alert(`Sheet ${sheetName}: Added ${addedCount} new products.`);
                 totalAdded += addedCount;
             });
-            
-            alert(`Total import completed. Added ${totalAdded} new products from all sheets.`);
-            
             saveData();
-            alert('Spreadsheet imported successfully!');
             showInventory();
         } catch (error) {
             alert('Error parsing spreadsheet: ' + error.message);
@@ -385,11 +363,11 @@ function showScanForm() {
         });
     }
     document.getElementById('startCameraBtn').onclick = function() {
-        if (!cameraActive) startCamera();
+        startCamera();
     };
     // Optionally auto-start camera on mobile
     if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        setTimeout(() => { if (!cameraActive) startCamera(); }, 500);
+        setTimeout(() => { startCamera(); }, 500);
     }
     document.getElementById('scanForm').addEventListener('submit', function(e) {
         e.preventDefault();

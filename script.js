@@ -632,43 +632,7 @@ function showInventory(sortByLocation = false) {
                 kwBtn.onclick = filterByKeyword;
             }
         }, 0);
-    // Advanced search by any field, min 3 letters
-    function filterByKeyword() {
-        const input = document.getElementById('keywordSearch');
-        if (!input) return;
-        const term = input.value.trim().toLowerCase();
-        if (term.length < 3) {
-            alert('Enter at least 3 letters to search.');
-            return;
-        }
-        filteredProducts = products.filter(p => {
-            return Object.keys(p).some(key => {
-                let val = p[key];
-                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
-                if (Array.isArray(val)) {
-                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
-                }
-                return false;
-            });
-        });
-        inventoryPage = 1;
-        showInventory(isSortedByLocation);
-    }
-    function clearKeywordSearch() {
-        const input = document.getElementById('keywordSearch');
-        if (input) input.value = '';
-        filteredProducts = products;
-        inventoryPage = 1;
-        showInventory(isSortedByLocation);
-    }
-    // Pagination controls
-    function nextInventoryPage() {
-        inventoryPage++;
-        showInventory(isSortedByLocation);
-    }
-    function prevInventoryPage() {
-        inventoryPage--;
-        showInventory(isSortedByLocation);
+    // Pagination controls remain here if needed
     }
     } catch (error) {
         alert('Error displaying inventory: ' + error.message);
@@ -869,27 +833,6 @@ function showSalesDetails() {
             kwBtn.onclick = filterSalesByKeyword;
         }
     }, 0);
-    function filterSalesByKeyword() {
-        const input = document.getElementById('salesKeywordSearch');
-        if (!input) return;
-        const term = input.value.trim().toLowerCase();
-        if (term.length < 2) {
-            filteredSales = sales;
-            showSalesDetails();
-            return;
-        }
-        filteredSales = sales.filter(sale => {
-            return [
-                sale.date, sale.sku, sale.name, sale.quantity, sale.price, sale.total, sale.profit, sale.pickedUp
-            ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
-        });
-        showSalesDetails();
-    }
-    window.clearSalesKeywordSearch = function() {
-        document.getElementById('salesKeywordSearch').value = '';
-        filteredSales = sales;
-        showSalesDetails();
-    }
     mainContent.innerHTML = html;
 }
 

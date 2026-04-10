@@ -911,4 +911,3 @@ function togglePickedUp(index) {
 }
 
 // Initialize with inventory view
-showInventory();

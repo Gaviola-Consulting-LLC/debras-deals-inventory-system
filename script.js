@@ -82,9 +82,9 @@ window.addEventListener('DOMContentLoaded', function() {
 // Functions
 function saveData() {
     try {
-        localStorage.setItem('products', JSON.stringify(products));
-        localStorage.setItem('sales', JSON.stringify(sales));
-        localStorage.setItem('revenue', revenue.toString());
+        localStorage.setItem('products', JSON.stringify(window.products));
+        localStorage.setItem('sales', JSON.stringify(window.sales));
+        localStorage.setItem('revenue', window.revenue.toString());
     } catch (e) {
         alert('Failed to save data: ' + e.message + '. Data may not persist.');
     }
@@ -174,7 +174,7 @@ function uploadSpreadsheet(e) {
                     }
                     const sku = rowData[colMap.sku];
                     if (!sku) continue; // Skip rows without SKU
-                    const existing = products.find(p => p.sku === sku);
+                    const existing = window.products.find(p => p.sku === sku);
                     if (existing) {
                         // Update existing
                         if (colMap.name !== undefined) existing.name = rowData[colMap.name] || existing.name;
@@ -202,7 +202,7 @@ function uploadSpreadsheet(e) {
                         if (colMap.notes !== undefined && rowData[colMap.notes]) {
                             product.notes.push({type: 'Product', text: rowData[colMap.notes]});
                         }
-                        products.push(product);
+                        window.products.push(product);
                         addedCount++;
                     }
                 }
@@ -517,7 +517,7 @@ function showScanForm() {
 function scanSku(e) {
     e.preventDefault();
     const sku = document.getElementById('scanSku').value;
-    const product = products.find(p => p.sku === sku);
+    const product = window.products.find(p => p.sku === sku);
     if (!product) {
         alert('Product not found!');
         return;
@@ -532,9 +532,9 @@ function scanSku(e) {
     
     // Record sale
     const saleAmount = product.price;
-    revenue += saleAmount;
+    window.revenue += saleAmount;
     const profit = (product.price - product.cost) * 1;
-    sales.push({
+    window.sales.push({
         sku: product.sku,
         name: product.name,
         quantity: 1,
@@ -667,7 +667,7 @@ function showInventory(sortByLocation = false) {
 
 function showMakeSaleForm() {
     let html = '<h2>Make a Sale</h2>';
-    if (products.length === 0) {
+    if (window.products.length === 0) {
         html += '<p>No products available for sale.</p>';
     } else {
         html += `
@@ -678,7 +678,7 @@ function showMakeSaleForm() {
                 <select id="productSelect" required>
                     <option value="">Choose a product</option>
         `;
-        products.forEach((product, index) => {
+        window.products.forEach((product, index) => {
             if (product.quantity > 0) {
                 html += `<option value="${index}">${product.name} (SKU: ${product.sku}) - $${product.price.toFixed(2)} (${product.quantity} available)</option>`;
             }

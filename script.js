@@ -10,6 +10,54 @@
  * - Removing or altering any copyright or proprietary notices belonging to Gaviola Consulting, LLC.
  */
 // Debra's Deals Inventory System
+// --- Simple Local License Check ---
+const VALID_LICENSE_KEYS = [
+    'GAVIOLA-2026-001',
+    'GAVIOLA-2026-002',
+    'GAVIOLA-2026-003'
+];
+
+function showLicenseScreen() {
+    mainContent.innerHTML = `
+        <h2>License Required</h2>
+        <form id="licenseForm">
+            <label for="licenseKey">Enter your license key:</label>
+            <input type="text" id="licenseKey" required style="width:260px;max-width:90vw;">
+            <button type="submit">Activate</button>
+        </form>
+        <div id="licenseError" style="color:red;margin-top:0.5em;"></div>
+    `;
+    document.getElementById('licenseForm').onsubmit = function(e) {
+        e.preventDefault();
+        const key = document.getElementById('licenseKey').value.trim();
+        if (VALID_LICENSE_KEYS.includes(key)) {
+            localStorage.setItem('licenseKey', key);
+            showInventory();
+        } else {
+            document.getElementById('licenseError').textContent = 'Invalid license key. Please try again.';
+        }
+    };
+}
+
+function checkLicense() {
+    const key = localStorage.getItem('licenseKey');
+    if (!key || !VALID_LICENSE_KEYS.includes(key)) {
+        showLicenseScreen();
+        return false;
+    }
+    return true;
+}
+
+// On page load, check license before showing app
+window.addEventListener('DOMContentLoaded', function() {
+    // Only prompt for license if not already set and valid
+    if (!checkLicense()) {
+        // If license is missing or invalid, show license screen and do nothing else
+        return;
+    }
+    // License is valid, continue loading app as normal
+    // ...existing code...
+});
 
 // Data storage using localStorage
 let products = JSON.parse(localStorage.getItem('products')) || [];

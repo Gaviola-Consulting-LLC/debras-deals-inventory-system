@@ -600,6 +600,8 @@ function showMakeSaleForm() {
         html += '<p>No products available for sale.</p>';
     } else {
         html += `
+            <button id="startSaleCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
+            <div id="saleBarcodeArea" style="margin-bottom:1rem;"></div>
             <form id="makeSaleForm">
                 <label for="productSelect">Select Product:</label>
                 <select id="productSelect" required>
@@ -612,16 +614,50 @@ function showMakeSaleForm() {
         });
         html += `
                 </select>
-                
                 <label for="saleQuantity">Quantity:</label>
                 <input type="number" id="saleQuantity" min="1" required>
-                
                 <button type="submit">Complete Sale</button>
             </form>
         `;
     }
     mainContent.innerHTML = html;
-    
+    // Camera logic for Make Sale
+    let saleQr = null;
+    document.getElementById('startSaleCameraBtn')?.addEventListener('click', function() {
+        const barcodeArea = document.getElementById('saleBarcodeArea');
+        barcodeArea.innerHTML = '<div id="saleReader" style="width:320px;max-width:100vw;"></div>';
+        if (window.Html5Qrcode) {
+            saleQr = new Html5Qrcode("saleReader");
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length) {
+                    saleQr.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: 250 },
+                        (decodedText, decodedResult) => {
+                            // Try to select product by SKU
+                            const idx = products.findIndex(p => p.sku === decodedText && p.quantity > 0);
+                            if (idx !== -1) {
+                                document.getElementById('productSelect').value = idx;
+                                barcodeArea.innerHTML = `<span style='color:green;'>Product selected: ${products[idx].name} (SKU: ${products[idx].sku})</span>`;
+                                saleQr.stop();
+                            } else {
+                                barcodeArea.innerHTML = `<span style='color:red;'>SKU not found or out of stock: ${decodedText}</span>`;
+                            }
+                        },
+                        (errorMsg) => {}
+                    ).catch(err => {
+                        barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
+                    });
+                } else {
+                    barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
+                }
+            }).catch(err => {
+                barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
+            });
+        } else {
+            barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner not loaded.</div>';
+        }
+    });
     if (products.some(p => p.quantity > 0)) {
         document.getElementById('makeSaleForm').addEventListener('submit', makeSale);
     }

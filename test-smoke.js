@@ -45,5 +45,7 @@ function runAllTests() {
     }
 }
 
-// Uncomment to run tests automatically on load:
-window.addEventListener('DOMContentLoaded', runAllTests);
+// Run tests automatically on load, but delay to ensure all scripts/UI are ready
+window.addEventListener('DOMContentLoaded', function() {
+    setTimeout(runAllTests, 500); // 500ms delay ensures global variables and UI are ready
+});

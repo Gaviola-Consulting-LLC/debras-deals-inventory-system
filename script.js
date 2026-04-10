@@ -436,7 +436,7 @@ function showScanForm() {
         handleScanSku(sku);
     });
     function handleScanSku(sku) {
-        const product = products.find(p => p.sku === sku);
+        const product = window.products.find(p => p.sku === sku);
         const scanResult = document.getElementById('scanResult');
         if (!product) {
             // Show add product form with SKU pre-filled
@@ -468,12 +468,12 @@ function showScanForm() {
                 const purchaseName = document.getElementById('newPurchaseName').value;
                 const purchaseSource = document.getElementById('newPurchaseSource').value;
                 const notesText = document.getElementById('newNotes').value;
-                if (products.find(p => p.sku === sku)) {
+                if (window.products.find(p => p.sku === sku)) {
                     alert('SKU already exists!');
                     return;
                 }
                 const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-                products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+                window.products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
                 saveData();
                 scanResult.innerHTML = `<span style='color:green;'>Product added successfully!</span>`;
                 showInventory();
@@ -495,9 +495,9 @@ function showScanForm() {
             product.quantity -= 1;
             // Record sale
             const saleAmount = product.price;
-            revenue += saleAmount;
+            window.revenue += saleAmount;
             const profit = (product.price - product.cost) * 1;
-            sales.push({
+            window.sales.push({
                 sku: product.sku,
                 name: product.name,
                 quantity: 1,

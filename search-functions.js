@@ -64,11 +64,11 @@ function filterSalesByKeyword() {
     if (!input) return;
     const term = input.value.trim().toLowerCase();
     if (term.length < 2) {
-        filteredSales = sales;
+        window.filteredSales = window.sales;
         showSalesDetails();
         return;
     }
-    filteredSales = sales.filter(sale => {
+    window.filteredSales = window.sales.filter(sale => {
         return [
             sale.date, sale.sku, sale.name, sale.quantity, sale.price, sale.total, sale.profit, sale.pickedUp
         ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
@@ -77,6 +77,6 @@ function filterSalesByKeyword() {
 }
 function clearSalesKeywordSearch() {
     document.getElementById('salesKeywordSearch').value = '';
-    filteredSales = sales;
+    window.filteredSales = window.sales;
     showSalesDetails();
 }

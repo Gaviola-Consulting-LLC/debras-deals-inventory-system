@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="styles.css?v=20260404-001">
 </head>
 <body>
+    <div id="barcodeLibStatus" style="background:#fffbe6;color:#b36b00;padding:0.5em 1em;text-align:center;font-size:1.1em;"></div>
     <!-- Password overlay removed -->
     <header>
         <h1>Debra's Deals Inventory System</h1>
@@ -41,8 +42,23 @@
     </footer>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Barcode scanner library: load before script.js -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js" onerror="alert('Barcode scanner library failed to load. Please check your internet connection and reload the page.');"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js" onerror="alert('Barcode scanner library failed to load. Please check your internet connection and reload the page.');"></script>
     <script src="script.js?v=20260404-001"></script>
+            <script>
+            // Diagnostic: Show if barcode scanner library is loaded
+            window.addEventListener('DOMContentLoaded', function() {
+                var statusDiv = document.getElementById('barcodeLibStatus');
+                if (window.Html5Qrcode) {
+                    statusDiv.style.background = '#e6ffed';
+                    statusDiv.style.color = '#237804';
+                    statusDiv.textContent = 'Barcode scanner library loaded successfully.';
+                } else {
+                    statusDiv.style.background = '#fff1f0';
+                    statusDiv.style.color = '#a8071a';
+                    statusDiv.textContent = 'Barcode scanner library NOT loaded. Camera scanning will not work.';
+                }
+            });
+            </script>
     <!-- Password script removed -->
 </body>
 </html>

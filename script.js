@@ -393,7 +393,45 @@ function showScanForm() {
         const product = products.find(p => p.sku === sku);
         const scanResult = document.getElementById('scanResult');
         if (!product) {
-            scanResult.innerHTML = '<span style="color:red;">Product not found!</span>';
+            // Show add product form with SKU pre-filled
+            scanResult.innerHTML = `
+                <span style='color:orange;'>Product not found! Add new product to inventory:</span>
+                <form id="addScannedProductForm" style="margin-top:1em;">
+                    <label>SKU:<br><input type="text" id="newSku" value="${sku}" required readonly></label><br>
+                    <label>Name:<br><input type="text" id="newName" required></label><br>
+                    <label>Cost:<br><input type="number" id="newCost" step="0.01" required></label><br>
+                    <label>Price:<br><input type="number" id="newPrice" step="0.01" required></label><br>
+                    <label>Quantity:<br><input type="number" id="newQuantity" value="1" required></label><br>
+                    <label>Location:<br><input type="text" id="newLocation"></label><br>
+                    <label>Hyperlink:<br><input type="url" id="newHyperlink"></label><br>
+                    <label>Purchase Name:<br><input type="text" id="newPurchaseName"></label><br>
+                    <label>Source of Purchase:<br><input type="text" id="newPurchaseSource"></label><br>
+                    <label>Notes:<br><textarea id="newNotes"></textarea></label><br>
+                    <button type="submit">Add Product</button>
+                </form>
+            `;
+            document.getElementById('addScannedProductForm').onsubmit = function(e) {
+                e.preventDefault();
+                const sku = document.getElementById('newSku').value;
+                const name = document.getElementById('newName').value;
+                const cost = parseFloat(document.getElementById('newCost').value);
+                const price = parseFloat(document.getElementById('newPrice').value);
+                const quantity = parseInt(document.getElementById('newQuantity').value);
+                const location = document.getElementById('newLocation').value;
+                const hyperlink = document.getElementById('newHyperlink').value;
+                const purchaseName = document.getElementById('newPurchaseName').value;
+                const purchaseSource = document.getElementById('newPurchaseSource').value;
+                const notesText = document.getElementById('newNotes').value;
+                if (products.find(p => p.sku === sku)) {
+                    alert('SKU already exists!');
+                    return;
+                }
+                const notes = notesText ? [{type: 'Product', text: notesText}] : [];
+                products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+                saveData();
+                scanResult.innerHTML = `<span style='color:green;'>Product added successfully!</span>`;
+                showInventory();
+            };
             return;
         }
         scanResult.innerHTML = `<b>Product:</b> ${product.name} (SKU: ${product.sku})<br>Current Quantity: ${product.quantity}<br><button id="addBtn">Add to Inventory</button> <button id="subtractBtn">Subtract from Inventory</button>`;

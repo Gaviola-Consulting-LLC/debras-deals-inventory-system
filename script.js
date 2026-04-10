@@ -650,12 +650,17 @@ function showInventory(sortByLocation = false) {
                     if (nameCandidate) purchaser = nameCandidate.trim();
                 }
                 const notes = notesArr.filter(n => n !== purchaser).join('; ');
-                // Hyperlink: always clickable if present
+                // Hyperlink: always clickable if present, always prepends https:// if missing
                 let hyperlink = '';
-                if (product.hyperlink && (product.hyperlink.startsWith('http://') || product.hyperlink.startsWith('https://'))) {
-                    hyperlink = `<a href="${product.hyperlink}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
-                } else if (product.hyperlink) {
-                    hyperlink = `<a href="https://${product.hyperlink}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
+                if (product.hyperlink) {
+                    let url = product.hyperlink.trim();
+                    if (!/^https?:\/\//i.test(url)) {
+                        url = 'https://' + url;
+                    }
+                    // Only render if it looks like a valid URL (contains a dot and no spaces)
+                    if (/^https?:\/\/.+\..+/.test(url) && !/\s/.test(url)) {
+                        hyperlink = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
+                    }
                 }
                 const escapedSku = (sku).replace(/'/g, "\\'");
                 html += `

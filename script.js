@@ -607,6 +607,7 @@ function showInventory(sortByLocation = false) {
                             <th>Retail</th>
                             <th>Sold For</th>
                             <th>Profit</th>
+                            <th>Purchaser</th>
                             <th>Notes</th>
                             <th>Link</th>
                             <th>Actions</th>
@@ -618,30 +619,62 @@ function showInventory(sortByLocation = false) {
             const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
             for (let i = startIdx; i < endIdx; i++) {
                 const product = filteredProducts[i];
+                // Ensure all fields are present
+                const condition = product.condition || '';
+                const descPuDate = product.descPuDate || '';
+                const asin = product.asin || '';
+                const name = product.name || '';
+                const quantity = product.quantity || 0;
+                const price = product.price ? Number(product.price) : 0;
+                const totalPrice = product.totalPrice ? Number(product.totalPrice) : (price && quantity ? price * quantity : 0);
+                const sku = product.sku || '';
+                const location = product.location || '';
+                const listDate = product.listDate || '';
+                const soldDate = product.soldDate || '';
+                const retail = product.retail ? Number(product.retail) : 0;
+                const soldFor = product.soldFor ? Number(product.soldFor) : 0;
+                // Calculate profit if possible
+                let profit = '';
+                if (soldFor && retail) {
+                    profit = (soldFor - retail).toFixed(2);
+                } else if (soldFor && price) {
+                    profit = (soldFor - price).toFixed(2);
+                } else if (product.profit !== undefined && product.profit !== '') {
+                    profit = Number(product.profit).toFixed(2);
+                }
+                // Purchaser: use purchaseName, or extract from notes if missing
+                let purchaser = product.purchaseName || '';
+                const notesArr = product.notes && Array.isArray(product.notes) ? product.notes.map(note => note.text) : [];
+                if (!purchaser && notesArr.length > 0) {
+                    const nameCandidate = notesArr.find(n => /^[A-Za-z .,'-]+$/.test(n.trim()) && !n.includes('@') && !n.toLowerCase().includes('http'));
+                    if (nameCandidate) purchaser = nameCandidate.trim();
+                }
+                const notes = notesArr.filter(n => n !== purchaser).join('; ');
+                // Hyperlink: always clickable if present
                 let hyperlink = '';
                 if (product.hyperlink && (product.hyperlink.startsWith('http://') || product.hyperlink.startsWith('https://'))) {
                     hyperlink = `<a href="${product.hyperlink}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
                 } else if (product.hyperlink) {
                     hyperlink = `<a href="https://${product.hyperlink}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
                 }
-                const notes = product.notes && Array.isArray(product.notes) ? product.notes.map(note => note.text).join('; ') : '';
-                const escapedSku = (product.sku || '').replace(/'/g, "\\'");
+                const escapedSku = (sku).replace(/'/g, "\\'");
                 html += `
                     <tr>
-                        <td>${product.condition || ''}</td>
-                        <td>${product.descPuDate || ''}</td>
-                        <td>${product.asin || ''}</td>
-                        <td>${product.name || ''}</td>
-                        <td>${product.quantity || 0}</td>
-                        <td>$${product.price ? product.price.toFixed(2) : ''}</td>
-                        <td>$${product.totalPrice ? Number(product.totalPrice).toFixed(2) : (product.price && product.quantity ? (product.price * product.quantity).toFixed(2) : '')}</td>
-                        <td>${product.sku || ''}</td>
-                        <td>${product.location || ''}</td>
-                        <td>${product.listDate || ''}</td>
-                        <td>${product.soldDate || ''}</td>
-                        <td>$${product.retail ? Number(product.retail).toFixed(2) : ''}</td>
-                        <td>$${product.soldFor ? Number(product.soldFor).toFixed(2) : ''}</td>
-                        <td>$${product.profit !== undefined && product.profit !== '' ? Number(product.profit).toFixed(2) : ''}</td>
+                        <td>${condition}</td>
+                        <td>${descPuDate}</td>
+                        <td>${asin}</td>
+                        <td>${name}</td>
+                        <td>${quantity}</td>
+                        <td>$${price ? price.toFixed(2) : ''}</td>
+                        <td>$${totalPrice ? totalPrice.toFixed(2) : ''}</td>
+                        <td>${sku}</td>
+                        <td>${location}</td>
+                        <td>${listDate}</td>
+                        <td>${soldDate}</td>
+                        <td>$${retail ? retail.toFixed(2) : ''}</td>
+                        <td>$${soldFor ? soldFor.toFixed(2) : ''}</td>
+                        <td>$${profit}</td>
+                        <td>${purchaser}</td>
                         <td>${notes}</td>
                         <td>${hyperlink}</td>
                         <td><button onclick="editProduct('${escapedSku}')">Edit</button></td>

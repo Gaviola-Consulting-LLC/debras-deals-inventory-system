@@ -1,3 +1,30 @@
+// Global keyword search for inventory
+function filterByKeyword() {
+    const input = document.getElementById('keywordSearch');
+    if (!input) return;
+    const term = input.value.trim().toLowerCase();
+    if (term.length < 2) {
+        window.filteredProducts = window.products;
+        showInventory(window.isSortedByLocation);
+        return;
+    }
+    window.filteredProducts = window.products.filter(p => {
+        return [
+            p.sku, p.name, p.cost, p.price, p.quantity, p.location, p.purchaseName, p.purchaseSource, p.hyperlink,
+            ...(Array.isArray(p.notes) ? p.notes.map(n => n.text) : [])
+        ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
+    });
+    window.inventoryPage = 1;
+    showInventory(window.isSortedByLocation);
+}
+
+function clearKeywordSearch() {
+    const input = document.getElementById('keywordSearch');
+    if (input) input.value = '';
+    window.filteredProducts = window.products;
+    window.inventoryPage = 1;
+    showInventory(window.isSortedByLocation);
+}
 // Per-header search for inventory table
 function filterByHeader() {
     // Collect all header search values

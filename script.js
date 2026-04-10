@@ -557,6 +557,7 @@ function showInventory(sortByLocation = false) {
         }
         
         let html = '<h2>Inventory</h2>';
+        html += `<input type="text" id="keywordSearch" placeholder="Search (min 2 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
         // Pagination controls
@@ -626,8 +627,18 @@ function showInventory(sortByLocation = false) {
             html += '</tbody></table>';
         }
         window.mainContent.innerHTML = html;
-        // Attach per-header search events
+        // Attach global and per-header search events
         setTimeout(() => {
+            // Global search
+            const kwInput = document.getElementById('keywordSearch');
+            const kwBtn = document.getElementById('keywordSearchBtn');
+            if (kwInput) {
+                kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
+            }
+            if (kwBtn) {
+                kwBtn.onclick = filterByKeyword;
+            }
+            // Per-header search
             const searchFields = [
                 { id: 'searchSku', key: 'sku' },
                 { id: 'searchName', key: 'name' },

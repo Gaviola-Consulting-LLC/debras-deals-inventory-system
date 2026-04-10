@@ -623,7 +623,17 @@ function showInventory(sortByLocation = false) {
                 const condition = product.condition || '';
                 const descPuDate = product.descPuDate || '';
                 const asin = product.asin || '';
-                const name = product.name || '';
+                let name = product.name || '';
+                // If Item Title looks like a URL, make it clickable
+                if (name) {
+                    let url = name.trim();
+                    if (!/^https?:\/\//i.test(url) && /\./.test(url) && !/\s/.test(url)) {
+                        url = 'https://' + url;
+                    }
+                    if (/^https?:\/\/.+\..+/.test(url) && !/\s/.test(url)) {
+                        name = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.name}</a>`;
+                    }
+                }
                 const quantity = product.quantity || 0;
                 const price = product.price ? Number(product.price) : 0;
                 const totalPrice = product.totalPrice ? Number(product.totalPrice) : (price && quantity ? price * quantity : 0);

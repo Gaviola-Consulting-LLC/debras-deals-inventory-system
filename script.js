@@ -14,7 +14,9 @@ products = products.map(p => ({
     quantity: p.quantity,
     location: p.location || '',
     hyperlink: p.hyperlink || '',
-    notes: p.notes || []
+    notes: p.notes || [],
+    purchaseName: p.purchaseName || '',
+    purchaseSource: p.purchaseSource || ''
 }));
 
 // Ensure sales have pickedUp and profit
@@ -28,6 +30,8 @@ sales = sales.map(s => ({
 let filteredSales = sales;
 let isSortedByLocation = false;
 let filteredProducts = products;
+let inventoryPage = 1;
+const ITEMS_PER_PAGE = 100;
 
 // DOM elements
 const mainContent = document.getElementById('mainContent');
@@ -214,28 +218,24 @@ function showAddProductForm() {
         <form id="addProductForm">
             <label for="sku">SKU:</label>
             <input type="text" id="sku" required>
-            
             <label for="name">Product Name:</label>
             <input type="text" id="name" required>
-            
             <label for="cost">Cost:</label>
             <input type="number" id="cost" step="0.01" required>
-            
             <label for="price">Selling Price:</label>
             <input type="number" id="price" step="0.01" required>
-            
             <label for="quantity">Quantity:</label>
             <input type="number" id="quantity" required>
-            
             <label for="location">Location:</label>
             <input type="text" id="location">
-            
             <label for="hyperlink">Hyperlink:</label>
             <input type="url" id="hyperlink">
-            
+            <label for="purchaseName">Purchase Name:</label>
+            <input type="text" id="purchaseName">
+            <label for="purchaseSource">Source of Purchase:</label>
+            <input type="text" id="purchaseSource">
             <label for="notes">Notes:</label>
             <textarea id="notes"></textarea>
-            
             <button type="submit">Add Product</button>
         </form>
     `;
@@ -252,17 +252,16 @@ function addProduct(e) {
     const quantity = parseInt(document.getElementById('quantity').value);
     const location = document.getElementById('location').value;
     const hyperlink = document.getElementById('hyperlink').value;
+    const purchaseName = document.getElementById('purchaseName').value;
+    const purchaseSource = document.getElementById('purchaseSource').value;
     const notesText = document.getElementById('notes').value;
-    
     // Check if SKU already exists
     if (products.find(p => p.sku === sku)) {
         alert('SKU already exists!');
         return;
     }
-    
     const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-    
-    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes });
+    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
     saveData();
     alert('Product added successfully!');
     showInventory();
@@ -279,28 +278,24 @@ function editProduct(sku) {
         <form id="editProductForm">
             <label for="editSku">SKU:</label>
             <input type="text" id="editSku" value="${product.sku}" required>
-            
             <label for="editName">Product Name:</label>
             <input type="text" id="editName" value="${product.name}" required>
-            
             <label for="editCost">Cost:</label>
             <input type="number" id="editCost" step="0.01" value="${product.cost}" required>
-            
             <label for="editPrice">Selling Price:</label>
             <input type="number" id="editPrice" step="0.01" value="${product.price}" required>
-            
             <label for="editQuantity">Quantity:</label>
             <input type="number" id="editQuantity" value="${product.quantity}" required>
-            
             <label for="editLocation">Location:</label>
             <input type="text" id="editLocation" value="${product.location}">
-            
             <label for="editHyperlink">Hyperlink:</label>
             <input type="url" id="editHyperlink" value="${product.hyperlink}">
-            
+            <label for="editPurchaseName">Purchase Name:</label>
+            <input type="text" id="editPurchaseName" value="${product.purchaseName || ''}">
+            <label for="editPurchaseSource">Source of Purchase:</label>
+            <input type="text" id="editPurchaseSource" value="${product.purchaseSource || ''}">
             <label for="editNotes">Notes:</label>
             <textarea id="editNotes">${notesText}</textarea>
-            
             <button type="submit">Update Product</button>
             <button type="button" onclick="showInventory()">Cancel</button>
         </form>
@@ -318,23 +313,21 @@ function updateProduct(e, oldSku) {
     const quantity = parseInt(document.getElementById('editQuantity').value);
     const location = document.getElementById('editLocation').value;
     const hyperlink = document.getElementById('editHyperlink').value;
+    const purchaseName = document.getElementById('editPurchaseName').value;
+    const purchaseSource = document.getElementById('editPurchaseSource').value;
     const notesText = document.getElementById('editNotes').value;
-    
     const productIndex = products.findIndex(p => p.sku === oldSku);
     if (productIndex === -1) return;
-    
     // Check if new SKU already exists (if changed)
     if (newSku !== oldSku && products.find(p => p.sku === newSku)) {
         alert('SKU already exists!');
         return;
     }
-    
     const notes = notesText.split('\n').map(line => {
         const [type, ...textParts] = line.split(': ');
         return {type: type || 'Product', text: textParts.join(': ') || line};
     }).filter(note => note.text.trim());
-    
-    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes };
+    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
     saveData();
     alert('Product updated successfully!');
     showInventory();
@@ -342,16 +335,87 @@ function updateProduct(e, oldSku) {
 
 function showScanForm() {
     mainContent.innerHTML = `
-        <h2>Scan SKU</h2>
+        <h2>Scan SKU (Barcode or Manual)</h2>
+        <div id="barcodeArea" style="margin-bottom:1rem;"></div>
         <form id="scanForm">
             <label for="scanSku">Enter or Scan SKU:</label>
-            <input type="text" id="scanSku" required autofocus>
-            
-            <button type="submit">Mark as Sold</button>
+            <input type="text" id="scanSku" required autocomplete="off">
+            <button type="submit">Submit</button>
         </form>
+        <div id="scanResult" style="margin-top:1rem;"></div>
     `;
-    
-    document.getElementById('scanForm').addEventListener('submit', scanSku);
+    // Barcode scanner setup
+    if (window.Html5Qrcode) {
+        const barcodeArea = document.getElementById('barcodeArea');
+        barcodeArea.innerHTML = '<div id="reader" style="width:320px;max-width:100vw;"></div>';
+        const html5Qr = new Html5Qrcode("reader");
+        Html5Qrcode.getCameras().then(cameras => {
+            if (cameras && cameras.length) {
+                html5Qr.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: 250 },
+                    (decodedText, decodedResult) => {
+                        document.getElementById('scanSku').value = decodedText;
+                        html5Qr.stop();
+                        handleScanSku(decodedText);
+                    },
+                    (errorMsg) => {}
+                ).catch(err => {
+                    barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
+                });
+            } else {
+                barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
+            }
+        }).catch(err => {
+            barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
+        });
+    }
+    document.getElementById('scanForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const sku = document.getElementById('scanSku').value;
+        handleScanSku(sku);
+    });
+
+    function handleScanSku(sku) {
+        const product = products.find(p => p.sku === sku);
+        const scanResult = document.getElementById('scanResult');
+        if (!product) {
+            scanResult.innerHTML = '<span style="color:red;">Product not found!</span>';
+            return;
+        }
+        scanResult.innerHTML = `<b>Product:</b> ${product.name} (SKU: ${product.sku})<br>Current Quantity: ${product.quantity}<br><button id="addBtn">Add to Inventory</button> <button id="subtractBtn">Subtract from Inventory</button>`;
+        document.getElementById('addBtn').onclick = function() {
+            product.quantity += 1;
+            saveData();
+            scanResult.innerHTML = `<span style='color:green;'>Added 1. New quantity: ${product.quantity}</span>`;
+            // Optionally record as a purchase (not a sale)
+            showInventory();
+        };
+        document.getElementById('subtractBtn').onclick = function() {
+            if (product.quantity <= 0) {
+                scanResult.innerHTML = '<span style="color:red;">Product out of stock!</span>';
+                return;
+            }
+            product.quantity -= 1;
+            // Record sale
+            const saleAmount = product.price;
+            revenue += saleAmount;
+            const profit = (product.price - product.cost) * 1;
+            sales.push({
+                sku: product.sku,
+                name: product.name,
+                quantity: 1,
+                price: product.price,
+                total: saleAmount,
+                profit: profit,
+                date: new Date().toLocaleString(),
+                pickedUp: false
+            });
+            saveData();
+            scanResult.innerHTML = `<span style='color:orange;'>Subtracted 1 (sold). New quantity: ${product.quantity}. Sale recorded.</span>`;
+            showInventory();
+        };
+    }
 }
 
 function scanSku(e) {
@@ -397,9 +461,19 @@ function showInventory(sortByLocation = false) {
         }
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="locationSearch" placeholder="Search by location"><button onclick="filterByLocation()">Search</button><button onclick="clearLocationSearch()">Clear</button><br>`;
+        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button onclick="filterByKeyword()">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
+        // Pagination controls
+        const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
+        if (inventoryPage > totalPages) inventoryPage = totalPages;
+        if (inventoryPage < 1) inventoryPage = 1;
+        if (filteredProducts.length > ITEMS_PER_PAGE) {
+            html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${inventoryPage}</span> of ${totalPages} ` +
+                `<button onclick='prevInventoryPage()' ${inventoryPage === 1 ? 'disabled' : ''}>&lt; Prev</button> ` +
+                `<button onclick='nextInventoryPage()' ${inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
+        }
         if (filteredProducts.length === 0) {
             html += '<p>No products match the search.</p>';
         } else {
@@ -413,6 +487,8 @@ function showInventory(sortByLocation = false) {
                             <th>Price</th>
                             <th>Quantity</th>
                             <th>Location</th>
+                            <th>Purchase Name</th>
+                            <th>Source of Purchase</th>
                             <th>Hyperlink</th>
                             <th>Notes</th>
                             <th>Availability</th>
@@ -421,16 +497,16 @@ function showInventory(sortByLocation = false) {
                     </thead>
                     <tbody>
             `;
-            filteredProducts.forEach(product => {
+            const startIdx = (inventoryPage - 1) * ITEMS_PER_PAGE;
+            const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
+            for (let i = startIdx; i < endIdx; i++) {
+                const product = filteredProducts[i];
                 const availability = product.quantity > 0 ? 'Available' : 'Out of Stock';
                 const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : 'No Link';
-                
-                // Check if product name is a URL and make it clickable
                 let nameDisplay = product.name || '';
                 if (nameDisplay && (nameDisplay.startsWith('http://') || nameDisplay.startsWith('https://'))) {
                     nameDisplay = `<a href="${nameDisplay}" target="_blank" style="color: blue; text-decoration: underline;">${nameDisplay}</a>`;
                 }
-                
                 const notes = product.notes && Array.isArray(product.notes) ? product.notes.map(note => {
                     const color = note.type === 'Priority' ? 'red' : note.type === 'Self' ? 'blue' : 'green';
                     return `<span style="color: ${color};">${note.type}: ${note.text}</span>`;
@@ -444,16 +520,53 @@ function showInventory(sortByLocation = false) {
                         <td>$${product.price ? product.price.toFixed(2) : '0.00'}</td>
                         <td>${product.quantity || 0}</td>
                         <td>${product.location || ''}</td>
+                        <td>${product.purchaseName || ''}</td>
+                        <td>${product.purchaseSource || ''}</td>
                         <td>${hyperlink}</td>
                         <td>${notes}</td>
                         <td>${availability}</td>
                         <td><button onclick="editProduct('${escapedSku}')">Edit</button></td>
                     </tr>
                 `;
-            });
+            }
             html += '</tbody></table>';
         }
         mainContent.innerHTML = html;
+        // Attach search events
+        setTimeout(() => {
+            const kwInput = document.getElementById('keywordSearch');
+            if (kwInput) {
+                kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
+            }
+        }, 0);
+    // Advanced search by any field, min 3 letters
+    function filterByKeyword() {
+        const term = document.getElementById('keywordSearch').value.trim().toLowerCase();
+        if (term.length < 3) {
+            alert('Enter at least 3 letters to search.');
+            return;
+        }
+        filteredProducts = products.filter(p => {
+            return Object.values(p).some(val => (typeof val === 'string' && val.toLowerCase().includes(term)));
+        });
+        inventoryPage = 1;
+        showInventory(isSortedByLocation);
+    }
+    function clearKeywordSearch() {
+        document.getElementById('keywordSearch').value = '';
+        filteredProducts = products;
+        inventoryPage = 1;
+        showInventory(isSortedByLocation);
+    }
+    // Pagination controls
+    function nextInventoryPage() {
+        inventoryPage++;
+        showInventory(isSortedByLocation);
+    }
+    function prevInventoryPage() {
+        inventoryPage--;
+        showInventory(isSortedByLocation);
+    }
     } catch (error) {
         alert('Error displaying inventory: ' + error.message);
     }

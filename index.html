@@ -40,8 +40,8 @@
         </span>
     </footer>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Barcode scanner library -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
+    <!-- Barcode scanner library: load before script.js -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js" onerror="alert('Barcode scanner library failed to load. Please check your internet connection and reload the page.');"></script>
     <script src="script.js?v=20260404-001"></script>
     <!-- Password script removed -->
 </body>

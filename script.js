@@ -550,7 +550,7 @@ function showInventory(sortByLocation = false) {
         }
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="keywordSearch" placeholder="Search (min 2 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
         html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
@@ -733,39 +733,34 @@ function showMakeSaleForm() {
                                 barcodeArea.innerHTML = `<span style='color:red;'>SKU not found or out of stock: ${decodedText}</span>`;
                             }
                         },
-                        (errorMsg) => {}
-                    ).then(() => { saleCameraActive = true; })
-                    .catch(err => {
-                        barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
-                    });
-                } else {
-                    barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
-                }
-            }).catch(err => {
-                barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
-            });
-        } else {
-            barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner not loaded.</div>';
-        }
-    });
-    if (products.some(p => p.quantity > 0)) {
-        document.getElementById('makeSaleForm').addEventListener('submit', makeSale);
-    }
-}
-
-function makeSale(e) {
-    e.preventDefault();
-    const productIndex = parseInt(document.getElementById('productSelect').value);
-    const quantity = parseInt(document.getElementById('saleQuantity').value);
-    
-    const product = products[productIndex];
-    if (quantity > product.quantity) {
-        alert('Not enough quantity in stock!');
-        return;
-    }
-    
-    // Deduct from inventory
-    product.quantity -= quantity;
+                        setTimeout(() => {
+                            const kwInput = document.getElementById('keywordSearch');
+                            const kwBtn = document.getElementById('keywordSearchBtn');
+                            if (kwInput) {
+                                kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
+                            }
+                            if (kwBtn) {
+                                kwBtn.onclick = filterByKeyword;
+                            }
+                        }, 0);
+                        // Advanced search by any field, min 2 letters
+                        function filterByKeyword() {
+                            const input = document.getElementById('keywordSearch');
+                            if (!input) return;
+                            const term = input.value.trim().toLowerCase();
+                            if (term.length < 2) {
+                                filteredProducts = products;
+                                showInventory(isSortedByLocation);
+                                return;
+                            }
+                            filteredProducts = products.filter(p => {
+                                return [
+                                    p.sku, p.name, p.cost, p.price, p.quantity, p.location, p.purchaseName, p.purchaseSource, p.hyperlink,
+                                    ...(Array.isArray(p.notes) ? p.notes.map(n => n.text) : [])
+                                ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
+                            });
+                            showInventory(isSortedByLocation);
+                        }
     
     // Record sale
     const saleAmount = product.price * quantity;
@@ -826,6 +821,7 @@ function showSalesDetails() {
             <button onclick="clearFilter()">Clear Filter</button>
         </div>
     `;
+    html += `<input type="text" id="salesKeywordSearch" placeholder="Search (min 2 letters, any field)" style="width:220px;max-width:80vw;"> <button id="salesKeywordSearchBtn">Search</button> <button onclick="clearSalesKeywordSearch()">Clear</button> `;
     if (filteredSales.length === 0) {
         html += '<p>No sales recorded yet.</p>';
     } else {
@@ -862,6 +858,37 @@ function showSalesDetails() {
             `;
         });
         html += '</tbody></table>';
+    }
+    setTimeout(() => {
+        const kwInput = document.getElementById('salesKeywordSearch');
+        const kwBtn = document.getElementById('salesKeywordSearchBtn');
+        if (kwInput) {
+            kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterSalesByKeyword(); });
+        }
+        if (kwBtn) {
+            kwBtn.onclick = filterSalesByKeyword;
+        }
+    }, 0);
+    function filterSalesByKeyword() {
+        const input = document.getElementById('salesKeywordSearch');
+        if (!input) return;
+        const term = input.value.trim().toLowerCase();
+        if (term.length < 2) {
+            filteredSales = sales;
+            showSalesDetails();
+            return;
+        }
+        filteredSales = sales.filter(sale => {
+            return [
+                sale.date, sale.sku, sale.name, sale.quantity, sale.price, sale.total, sale.profit, sale.pickedUp
+            ].some(val => (val !== undefined && String(val).toLowerCase().includes(term)));
+        });
+        showSalesDetails();
+    }
+    window.clearSalesKeywordSearch = function() {
+        document.getElementById('salesKeywordSearch').value = '';
+        filteredSales = sales;
+        showSalesDetails();
     }
     mainContent.innerHTML = html;
 }

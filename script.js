@@ -181,9 +181,12 @@ function uploadSpreadsheet(e) {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
             const sheetNames = workbook.SheetNames;
-            let totalAdded = 0;
+            const productsBySku = new Map(
+                products.map(product => [String(product.sku || '').trim(), product]).filter(([sku]) => sku)
+            );
             sheetNames.forEach(sheetName => {
                 const worksheet = workbook.Sheets[sheetName];
+                if (!worksheet || !worksheet['!ref']) return;
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 const maxRow = range.e.r;
                 const maxCol = range.e.c;
@@ -204,6 +207,7 @@ function uploadSpreadsheet(e) {
                         else if (h.includes('asin')) colMap.asin = index;
                         else if (h.includes('item title') || h.includes('name') || h.includes('title')) colMap.name = index;
                         else if (h === 'qty' || h.includes('quantity')) colMap.quantity = index;
+                        else if (h === 'cost' || h.includes('item cost') || h.includes('unit cost')) colMap.cost = index;
                         else if (h.includes('item price')) colMap.price = index;
                         else if (h.includes('total price')) colMap.totalPrice = index;
                         else if (h === 'sku') colMap.sku = index;
@@ -217,7 +221,6 @@ function uploadSpreadsheet(e) {
                         else if (h === 'link' || h.includes('hyperlink')) colMap.hyperlink = index;
                     }
                 });
-                let addedCount = 0;
                 // Data from row 1 onwards
                 for (let r = 1; r <= maxRow; r++) {
                     const rowData = {};
@@ -231,46 +234,64 @@ function uploadSpreadsheet(e) {
                         }
                         rowData[c] = value;
                     }
-                    const sku = rowData[colMap.sku];
+                    const sku = String(rowData[colMap.sku] || '').trim();
                     if (!sku) continue; // Skip rows without SKU
-                    const existing = products.find(p => p.sku === sku);
-                    // Build product from all mapped columns
-                    const productData = {
-                        sku: sku,
-                        name: colMap.name !== undefined ? rowData[colMap.name] : '',
-                        cost: colMap.cost !== undefined ? parseFloat(rowData[colMap.cost]) || 0 : 0,
-                        price: colMap.price !== undefined ? parseFloat(rowData[colMap.price]) || 0 : 0,
-                        quantity: colMap.quantity !== undefined ? parseInt(rowData[colMap.quantity]) || 0 : 0,
-                        location: colMap.location !== undefined ? rowData[colMap.location] : '',
-                        hyperlink: colMap.hyperlink !== undefined ? rowData[colMap.hyperlink] : '',
-                        notes: [],
-                        condition: colMap.condition !== undefined ? rowData[colMap.condition] : '',
-                        descPuDate: colMap.descPuDate !== undefined ? rowData[colMap.descPuDate] : '',
-                        asin: colMap.asin !== undefined ? rowData[colMap.asin] : '',
-                        listDate: colMap.listDate !== undefined ? rowData[colMap.listDate] : '',
-                        soldDate: colMap.soldDate !== undefined ? rowData[colMap.soldDate] : '',
-                        retail: colMap.retail !== undefined ? rowData[colMap.retail] : '',
-                        soldFor: colMap.soldFor !== undefined ? rowData[colMap.soldFor] : '',
-                        profit: colMap.profit !== undefined ? rowData[colMap.profit] : '',
-                        totalPrice: colMap.totalPrice !== undefined ? rowData[colMap.totalPrice] : '',
-                    };
-                    if (colMap.notes !== undefined && rowData[colMap.notes]) {
+                    const existing = productsBySku.get(sku);
+                    const productData = { sku };
+                    if (colMap.name !== undefined) productData.name = rowData[colMap.name];
+                    if (colMap.cost !== undefined) productData.cost = parseFloat(rowData[colMap.cost]) || 0;
+                    if (colMap.price !== undefined) productData.price = parseFloat(rowData[colMap.price]) || 0;
+                    if (colMap.quantity !== undefined) productData.quantity = parseInt(rowData[colMap.quantity], 10) || 0;
+                    if (colMap.location !== undefined) productData.location = rowData[colMap.location];
+                    if (colMap.hyperlink !== undefined) productData.hyperlink = rowData[colMap.hyperlink];
+                    if (colMap.condition !== undefined) productData.condition = rowData[colMap.condition];
+                    if (colMap.descPuDate !== undefined) productData.descPuDate = rowData[colMap.descPuDate];
+                    if (colMap.asin !== undefined) productData.asin = rowData[colMap.asin];
+                    if (colMap.listDate !== undefined) productData.listDate = rowData[colMap.listDate];
+                    if (colMap.soldDate !== undefined) productData.soldDate = rowData[colMap.soldDate];
+                    if (colMap.retail !== undefined) productData.retail = rowData[colMap.retail];
+                    if (colMap.soldFor !== undefined) productData.soldFor = rowData[colMap.soldFor];
+                    if (colMap.profit !== undefined) productData.profit = rowData[colMap.profit];
+                    if (colMap.totalPrice !== undefined) productData.totalPrice = rowData[colMap.totalPrice];
+                    if (colMap.notes !== undefined) {
                         const noteText = rowData[colMap.notes];
-                        productData.notes.push({type: 'Product', text: noteText});
-                        // If the note looks like a name (letters and spaces, no @ or http), set as purchaser name
-                        if (!productData.purchaseName && /^[A-Za-z .,'-]+$/.test(noteText.trim()) && !noteText.includes('@') && !noteText.toLowerCase().includes('http')) {
-                            productData.purchaseName = noteText.trim();
+                        if (noteText) {
+                            productData.notes = [{type: 'Product', text: noteText}];
+                            // If the note looks like a name (letters and spaces, no @ or http), set as purchaser name
+                            if (!productData.purchaseName && /^[A-Za-z .,'-]+$/.test(noteText.trim()) && !noteText.includes('@') && !noteText.toLowerCase().includes('http')) {
+                                productData.purchaseName = noteText.trim();
+                            }
                         }
                     }
                     if (existing) {
-                        // Update all fields
                         Object.assign(existing, productData);
                     } else {
-                        products.push(productData);
-                        addedCount++;
+                        const newProduct = {
+                            sku,
+                            name: '',
+                            cost: 0,
+                            price: 0,
+                            quantity: 0,
+                            location: '',
+                            hyperlink: '',
+                            notes: [],
+                            purchaseName: '',
+                            purchaseSource: '',
+                            condition: '',
+                            descPuDate: '',
+                            asin: '',
+                            listDate: '',
+                            soldDate: '',
+                            retail: '',
+                            soldFor: '',
+                            profit: '',
+                            totalPrice: '',
+                            ...productData
+                        };
+                        products.push(newProduct);
+                        productsBySku.set(sku, newProduct);
                     }
                 }
-                totalAdded += addedCount;
             });
             saveData();
             showInventory();

@@ -710,8 +710,8 @@ function showInventory(sortByLocation = false) {
                 };
                 const quantity = product.quantity || 0;
                 const price = product.price ? Number(product.price) : 0;
-                const totalPriceField = parseMoneyValue(product.totalPrice);
-                const totalPrice = totalPriceField !== null ? totalPriceField : (price && quantity ? price * quantity : 0);
+                const parsedTotalPrice = parseMoneyValue(product.totalPrice);
+                const totalPrice = parsedTotalPrice;
                 const sku = product.sku || '';
                 const location = product.location || '';
                 const listDate = product.listDate || '';
@@ -720,8 +720,8 @@ function showInventory(sortByLocation = false) {
                 const soldFor = parseMoneyValue(product.soldFor);
                 // Calculate profit from soldFor - totalPrice only
                 let profit = '';
-                if (soldFor !== null && totalPriceField !== null) {
-                    profit = (soldFor - totalPriceField).toFixed(2);
+                if (soldFor !== null && parsedTotalPrice !== null) {
+                    profit = (soldFor - parsedTotalPrice).toFixed(2);
                 }
                 // Purchaser: use purchaseName, or extract from notes if missing
                 let purchaser = product.purchaseName || '';
@@ -752,7 +752,7 @@ function showInventory(sortByLocation = false) {
                         <td>${name}</td>
                         <td>${quantity}</td>
                         <td>$${price ? price.toFixed(2) : ''}</td>
-                        <td>$${totalPrice ? totalPrice.toFixed(2) : ''}</td>
+                        <td>$${totalPrice !== null ? totalPrice.toFixed(2) : ''}</td>
                         <td>${sku}</td>
                         <td>${location}</td>
                         <td>${listDate}</td>

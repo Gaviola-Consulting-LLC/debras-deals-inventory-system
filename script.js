@@ -126,6 +126,53 @@ function formatDateMMDDYYYY(value) {
     return `${month}/${day}/${parsed.getFullYear()}`;
 }
 
+function formatDateMMDDYY(value) {
+    const formatted = formatDateMMDDYYYY(value);
+    const match = formatted.match(/^(\d{2}\/\d{2})\/(\d{4})$/);
+    if (!match) return '';
+    return `${match[1]}/${match[2].slice(-2)}`;
+}
+
+function formatDescPuDateValue(value) {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return formatDateMMDDYY(value);
+
+    const rawInput = String(value);
+    const input = rawInput.trim();
+    if (!input) return '';
+
+    const datePattern = /\b(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g;
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+    let hasDateToken = false;
+
+    const addTextSegment = (text) => {
+        if (!text) return;
+        const cleaned = text.replace(/^[\s/|,;]+|[\s/|,;]+$/g, '').trim();
+        if (cleaned) segments.push(cleaned);
+    };
+
+    while ((match = datePattern.exec(input)) !== null) {
+        hasDateToken = true;
+        addTextSegment(input.slice(lastIndex, match.index));
+        const formattedDate = formatDateMMDDYY(match[0]);
+        if (formattedDate) {
+            segments.push(formattedDate);
+        } else {
+            addTextSegment(match[0]);
+        }
+        lastIndex = match.index + match[0].length;
+    }
+
+    addTextSegment(input.slice(lastIndex));
+
+    if (hasDateToken && segments.length > 0) return segments.join(' / ');
+
+    const formattedSingleDate = formatDateMMDDYY(input);
+    return formattedSingleDate || rawInput;
+}
+
 // Ensure products have new fields
 products = products.map(p => ({
     sku: p.sku,
@@ -752,7 +799,7 @@ function showInventory(sortByLocation = false) {
                 const product = filteredProducts[i];
                 // Ensure all fields are present
                 const condition = product.condition || '';
-                const descPuDate = product.descPuDate || '';
+                const descPuDate = formatDescPuDateValue(product.descPuDate);
                 const asin = product.asin || '';
                 let name = product.name || '';
                 // If Item Title looks like a URL, make it clickable

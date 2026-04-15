@@ -133,12 +133,12 @@ function formatDescPuDateMMDDYY(value) {
         return String(value);
     }
 
-    const parts = formatted.split('/');
-    if (parts.length !== 3) {
+    const match = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) {
         return String(value);
     }
 
-    return `${parts[0]}/${parts[1]}/${parts[2].slice(-2)}`;
+    return `${match[1]}/${match[2]}/${match[3].slice(-2)}`;
 }
 
 // Ensure products have new fields

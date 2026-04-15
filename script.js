@@ -128,8 +128,9 @@ function formatDateMMDDYYYY(value) {
 
 function formatDateMMDDYY(value) {
     const formatted = formatDateMMDDYYYY(value);
+    if (!formatted) return value === null || value === undefined ? '' : String(value).trim();
     const match = formatted.match(/^(\d{2}\/\d{2})\/(\d{4})$/);
-    if (!match) return '';
+    if (!match) return formatted;
     return `${match[1]}/${match[2].slice(-2)}`;
 }
 
@@ -141,19 +142,20 @@ function formatDescPuDateValue(value) {
     const input = rawInput.trim();
     if (!input) return '';
 
+    // Matches YYYY-MM-DD, YYYY/MM/DD, MM-DD-YY, MM/DD/YY, MM-DD-YYYY, and MM/DD/YYYY tokens inside mixed text.
     const datePattern = /\b(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g;
+    const SEPARATOR_TRIM_PATTERN = /^[\s/|,;]+|[\s/|,;]+$/g;
     const segments = [];
     let lastIndex = 0;
-    let match;
     let hasDateToken = false;
 
     const addTextSegment = (text) => {
         if (!text) return;
-        const cleaned = text.replace(/^[\s/|,;]+|[\s/|,;]+$/g, '').trim();
+        const cleaned = text.replace(SEPARATOR_TRIM_PATTERN, '').trim();
         if (cleaned) segments.push(cleaned);
     };
 
-    while ((match = datePattern.exec(input)) !== null) {
+    for (const match of input.matchAll(datePattern)) {
         hasDateToken = true;
         addTextSegment(input.slice(lastIndex, match.index));
         const formattedDate = formatDateMMDDYY(match[0]);
@@ -169,8 +171,7 @@ function formatDescPuDateValue(value) {
 
     if (hasDateToken && segments.length > 0) return segments.join(' / ');
 
-    const formattedSingleDate = formatDateMMDDYY(input);
-    return formattedSingleDate || rawInput;
+    return formatDateMMDDYY(input);
 }
 
 // Ensure products have new fields

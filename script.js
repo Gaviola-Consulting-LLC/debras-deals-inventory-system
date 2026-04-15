@@ -709,7 +709,7 @@ function showInventory(sortByLocation = false) {
                     return Number.isFinite(numericValue) ? numericValue : null;
                 };
                 const quantity = product.quantity || 0;
-                const price = product.price ? Number(product.price) : 0;
+                const price = parseMoneyValue(product.price);
                 const totalPrice = parseMoneyValue(product.totalPrice);
                 const sku = product.sku || '';
                 const location = product.location || '';
@@ -750,7 +750,7 @@ function showInventory(sortByLocation = false) {
                         <td>${asin}</td>
                         <td>${name}</td>
                         <td>${quantity}</td>
-                        <td>$${price ? price.toFixed(2) : ''}</td>
+                        <td>$${price !== null ? price.toFixed(2) : ''}</td>
                         <td>$${totalPrice !== null ? totalPrice.toFixed(2) : ''}</td>
                         <td>${sku}</td>
                         <td>${location}</td>

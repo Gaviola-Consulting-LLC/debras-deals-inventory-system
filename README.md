@@ -40,4 +40,5 @@ A mobile-friendly inventory and sales tracking web app built with HTML, CSS, and
 
 ## Notes
 - The app stores data in `localStorage`, so inventory and sales persist per browser.
+- The app does not require a password. A valid license key is requested once per browser/device, stored in `localStorage`, and then checked silently on later visits.
 - If you update app files and still see old content, refresh the browser cache or open in a private window.

@@ -703,23 +703,24 @@ function showInventory(sortByLocation = false) {
                         name = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.name}</a>`;
                     }
                 }
+                const parseMoneyValue = (value) => {
+                    if (value === null || value === undefined || value === '') return null;
+                    const numericValue = Number(String(value).replace(/[$,]/g, '').trim());
+                    return Number.isFinite(numericValue) ? numericValue : null;
+                };
                 const quantity = product.quantity || 0;
-                const price = product.price ? Number(product.price) : 0;
-                const totalPrice = product.totalPrice ? Number(product.totalPrice) : (price && quantity ? price * quantity : 0);
+                const price = parseMoneyValue(product.price);
+                const totalPrice = parseMoneyValue(product.totalPrice);
                 const sku = product.sku || '';
                 const location = product.location || '';
                 const listDate = product.listDate || '';
                 const soldDate = product.soldDate || '';
-                const retail = product.retail ? Number(product.retail) : 0;
-                const soldFor = product.soldFor ? Number(product.soldFor) : 0;
-                // Calculate profit if possible
+                const retail = parseMoneyValue(product.retail);
+                const soldFor = parseMoneyValue(product.soldFor);
+                // Calculate profit as (soldFor - totalPrice) * quantity
                 let profit = '';
-                if (soldFor && retail) {
-                    profit = (soldFor - retail).toFixed(2);
-                } else if (soldFor && price) {
-                    profit = (soldFor - price).toFixed(2);
-                } else if (product.profit !== undefined && product.profit !== '') {
-                    profit = Number(product.profit).toFixed(2);
+                if (soldFor !== null && totalPrice !== null) {
+                    profit = ((soldFor - totalPrice) * quantity).toFixed(2);
                 }
                 // Purchaser: use purchaseName, or extract from notes if missing
                 let purchaser = product.purchaseName || '';
@@ -749,15 +750,15 @@ function showInventory(sortByLocation = false) {
                         <td>${asin}</td>
                         <td>${name}</td>
                         <td>${quantity}</td>
-                        <td>$${price ? price.toFixed(2) : ''}</td>
-                        <td>$${totalPrice ? totalPrice.toFixed(2) : ''}</td>
+                        <td>$${price !== null ? price.toFixed(2) : ''}</td>
+                        <td>$${totalPrice !== null ? totalPrice.toFixed(2) : ''}</td>
                         <td>${sku}</td>
                         <td>${location}</td>
                         <td>${listDate}</td>
                         <td>${soldDate}</td>
-                        <td>$${retail ? retail.toFixed(2) : ''}</td>
-                        <td>$${soldFor ? soldFor.toFixed(2) : ''}</td>
-                        <td>$${profit}</td>
+                        <td>$${retail !== null ? retail.toFixed(2) : ''}</td>
+                        <td>$${soldFor !== null ? soldFor.toFixed(2) : ''}</td>
+                        <td>${profit !== '' ? `$${profit}` : ''}</td>
                         <td>${purchaser}</td>
                         <td>${notes}</td>
                         <td>${hyperlink}</td>

@@ -1,4 +1,63 @@
+/*
+ * Intellectual Property Ownership:
+ * The Software, including but not limited to its object code, source code, visual expressions, screen displays, graphics, design, and underlying algorithms, is the sole and exclusive property of Gaviola Consulting, LLC.
+ * All right, title, and interest in and to the Software, including all associated Intellectual Property Rights (including, without limitation, copyrights, trademarks, and trade secrets), shall at all times remain vested in Gaviola Consulting, LLC. No license, lease, or sale of the software to any third party shall be construed as a transfer of ownership.
+ *
+ * Usage Restrictions (The "No Reverse Engineering" Clause):
+ * Users are strictly prohibited from:
+ * - Modifying, copying, or creating derivative works based on the Software.
+ * - Reverse engineering, decompiling, or disassembling the code.
+ * - Removing or altering any copyright or proprietary notices belonging to Gaviola Consulting, LLC.
+ */
 // Debra's Deals Inventory System
+// --- Simple Local License Check ---
+const VALID_LICENSE_KEYS = [
+    'GAVIOLA-2026-001',
+    'GAVIOLA-2026-002',
+    'GAVIOLA-2026-003'
+];
+
+function showLicenseScreen() {
+    mainContent.innerHTML = `
+        <h2>License Required</h2>
+        <form id="licenseForm">
+            <label for="licenseKey">Enter your license key:</label>
+            <input type="text" id="licenseKey" required style="width:260px;max-width:90vw;">
+            <button type="submit">Activate</button>
+        </form>
+        <div id="licenseError" style="color:red;margin-top:0.5em;"></div>
+    `;
+    document.getElementById('licenseForm').onsubmit = function(e) {
+        e.preventDefault();
+        const key = document.getElementById('licenseKey').value.trim();
+        if (VALID_LICENSE_KEYS.includes(key)) {
+            localStorage.setItem('licenseKey', key);
+            showInventory();
+        } else {
+            document.getElementById('licenseError').textContent = 'Invalid license key. Please try again.';
+        }
+    };
+}
+
+function checkLicense() {
+    const key = localStorage.getItem('licenseKey');
+    if (!key || !VALID_LICENSE_KEYS.includes(key)) {
+        showLicenseScreen();
+        return false;
+    }
+    return true;
+}
+
+// On page load, check license before showing app
+window.addEventListener('DOMContentLoaded', function() {
+    // Only prompt for license if not already set and valid
+    if (!checkLicense()) {
+        // If license is missing or invalid, show license screen and do nothing else
+        return;
+    }
+    // License is valid, continue loading app as normal
+    // ...existing code...
+});
 
 // Data storage using localStorage
 let products = JSON.parse(localStorage.getItem('products')) || [];
@@ -14,7 +73,19 @@ products = products.map(p => ({
     quantity: p.quantity,
     location: p.location || '',
     hyperlink: p.hyperlink || '',
-    notes: p.notes || []
+    notes: p.notes || [],
+    purchaseName: p.purchaseName || '',
+    purchaseSource: p.purchaseSource || '',
+    // Added fields for spreadsheet mapping
+    condition: p.condition || '',
+    descPuDate: p.descPuDate || '',
+    asin: p.asin || '',
+    listDate: p.listDate || '',
+    soldDate: p.soldDate || '',
+    retail: p.retail || '',
+    soldFor: p.soldFor || '',
+    profit: p.profit !== undefined ? p.profit : '',
+    totalPrice: p.totalPrice !== undefined ? p.totalPrice : (p.price && p.quantity ? (p.price * p.quantity) : ''),
 }));
 
 // Ensure sales have pickedUp and profit
@@ -28,6 +99,17 @@ sales = sales.map(s => ({
 let filteredSales = sales;
 let isSortedByLocation = false;
 let filteredProducts = products;
+let inventoryPage = 1;
+const ITEMS_PER_PAGE = 100;
+// Patch: Expose pagination functions globally so HTML buttons work
+window.nextInventoryPage = function() {
+    inventoryPage++;
+    showInventory(isSortedByLocation);
+};
+window.prevInventoryPage = function() {
+    inventoryPage--;
+    showInventory(isSortedByLocation);
+};
 
 // DOM elements
 const mainContent = document.getElementById('mainContent');
@@ -62,42 +144,52 @@ function saveData() {
 function showUploadForm() {
     mainContent.innerHTML = `
         <h2>Upload Spreadsheet</h2>
-        <form id="uploadForm">
-            <input type="file" id="fileInput" accept=".xlsx,.xls" required>
-            <button type="submit">Upload and Import</button>
+        <form id="uploadForm" autocomplete="off" novalidate>
+            <label for="fileInput" style="display:block;margin-bottom:1rem;font-weight:bold;">Choose Excel file (.xlsx, .xls):</label>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required style="font-size:1.1rem;padding:0.5rem;width:100%;max-width:350px;" />
+            <button type="submit" style="margin-top:1rem;">Upload and Import</button>
         </form>
+        <div id="iosHint" style="margin-top:1rem;color:#555;font-size:0.95rem;">If you have trouble selecting a file on iPhone/iPad, make sure the file is saved in your Files app (not iCloud Drive only), then try again. Safari and Chrome on iOS are supported.</div>
     `;
-    
-    document.getElementById('uploadForm').addEventListener('submit', uploadSpreadsheet);
+    // Always open file picker, never camera
+    const fileInput = document.getElementById('fileInput');
+    fileInput.removeAttribute('capture');
+    fileInput.setAttribute('tabindex', '0');
+    fileInput.addEventListener('click', function(e) {
+        fileInput.value = '';
+    });
+    // Remove all validation messages on submit
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        if (window && window.document) {
+            const forms = document.querySelectorAll('form');
+            forms.forEach(f => f.noValidate = true);
+        }
+        uploadSpreadsheet(e);
+    });
 }
 
 function uploadSpreadsheet(e) {
     e.preventDefault();
     const file = document.getElementById('fileInput').files[0];
     if (!file) {
-        alert('No file selected.');
+        // No file selected, do nothing
         return;
     }
-    
-    alert('Processing file: ' + file.name);
-    
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
-            alert('File read successfully, parsing...');
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
             const sheetNames = workbook.SheetNames;
-            alert('Sheets found: ' + sheetNames.join(', '));
-            
-            let totalAdded = 0;
+            const productsBySku = new Map(
+                products.map(product => [String(product.sku || '').trim(), product]).filter(([sku]) => sku)
+            );
             sheetNames.forEach(sheetName => {
-                alert('Processing sheet: ' + sheetName);
                 const worksheet = workbook.Sheets[sheetName];
+                if (!worksheet || !worksheet['!ref']) return;
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 const maxRow = range.e.r;
                 const maxCol = range.e.c;
-                
                 // Get headers from row 0
                 const headers = [];
                 for (let c = 0; c <= maxCol; c++) {
@@ -105,28 +197,30 @@ function uploadSpreadsheet(e) {
                     const cell = worksheet[cellAddr];
                     headers.push(cell ? String(cell.v || '') : '');
                 }
-                
-                alert('Headers in ' + sheetName + ': ' + headers.join(', '));
-                
-                // Map columns
+                // Map columns (full mapping for all headers)
                 const colMap = {};
                 headers.forEach((header, index) => {
                     if (header) {
                         const h = header.toLowerCase().trim();
-                        if (h.includes('sku')) colMap.sku = index;
-                        else if (h.includes('item title') || h.includes('desc')) colMap.name = index;
-                        else if (h.includes('item price') || h.includes('cost')) colMap.cost = index;
-                        else if (h.includes('retail') || h.includes('selling price')) colMap.price = index;
-                        else if (h.includes('qty') || h.includes('quantity')) colMap.quantity = index;
-                        else if (h.includes('loc') || h.includes('location')) colMap.location = index;
-                        else if (h.includes('link') || h.includes('hyperlink')) colMap.hyperlink = index;
+                        if (h.includes('condition')) colMap.condition = index;
+                        else if (h.includes('desc') || h.includes('pu date')) colMap.descPuDate = index;
+                        else if (h.includes('asin')) colMap.asin = index;
+                        else if (h.includes('item title') || h.includes('name') || h.includes('title')) colMap.name = index;
+                        else if (h === 'qty' || h.includes('quantity')) colMap.quantity = index;
+                        else if (h === 'cost' || h.includes('item cost') || h.includes('unit cost')) colMap.cost = index;
+                        else if (h.includes('item price')) colMap.price = index;
+                        else if (h.includes('total price')) colMap.totalPrice = index;
+                        else if (h === 'sku') colMap.sku = index;
+                        else if (h === 'loc' || h.includes('location')) colMap.location = index;
+                        else if (h.includes('list date')) colMap.listDate = index;
+                        else if (h.includes('sold date')) colMap.soldDate = index;
+                        else if (h.includes('retail')) colMap.retail = index;
+                        else if (h.includes('sold for')) colMap.soldFor = index;
+                        else if (h.includes('profit')) colMap.profit = index;
                         else if (h.includes('notes')) colMap.notes = index;
+                        else if (h === 'link' || h.includes('hyperlink')) colMap.hyperlink = index;
                     }
                 });
-                
-                alert('Mapped columns in ' + sheetName + ': ' + JSON.stringify(colMap));
-                
-                let addedCount = 0;
                 // Data from row 1 onwards
                 for (let r = 1; r <= maxRow; r++) {
                     const rowData = {};
@@ -140,51 +234,66 @@ function uploadSpreadsheet(e) {
                         }
                         rowData[c] = value;
                     }
-                    
-                    const sku = rowData[colMap.sku];
+                    const sku = String(rowData[colMap.sku] || '').trim();
                     if (!sku) continue; // Skip rows without SKU
-                    
-                    const existing = products.find(p => p.sku === sku);
+                    const existing = productsBySku.get(sku);
+                    const productData = { sku };
+                    if (colMap.name !== undefined) productData.name = rowData[colMap.name];
+                    if (colMap.cost !== undefined) productData.cost = parseFloat(rowData[colMap.cost]) || 0;
+                    if (colMap.price !== undefined) productData.price = parseFloat(rowData[colMap.price]) || 0;
+                    if (colMap.quantity !== undefined) productData.quantity = parseInt(rowData[colMap.quantity], 10) || 0;
+                    if (colMap.location !== undefined) productData.location = rowData[colMap.location];
+                    if (colMap.hyperlink !== undefined) productData.hyperlink = rowData[colMap.hyperlink];
+                    if (colMap.condition !== undefined) productData.condition = rowData[colMap.condition];
+                    if (colMap.descPuDate !== undefined) productData.descPuDate = rowData[colMap.descPuDate];
+                    if (colMap.asin !== undefined) productData.asin = rowData[colMap.asin];
+                    if (colMap.listDate !== undefined) productData.listDate = rowData[colMap.listDate];
+                    if (colMap.soldDate !== undefined) productData.soldDate = rowData[colMap.soldDate];
+                    if (colMap.retail !== undefined) productData.retail = rowData[colMap.retail];
+                    if (colMap.soldFor !== undefined) productData.soldFor = rowData[colMap.soldFor];
+                    if (colMap.profit !== undefined) productData.profit = rowData[colMap.profit];
+                    if (colMap.totalPrice !== undefined) productData.totalPrice = rowData[colMap.totalPrice];
+                    if (colMap.notes !== undefined) {
+                        const noteText = rowData[colMap.notes];
+                        if (noteText) {
+                            productData.notes = [{type: 'Product', text: noteText}];
+                            // If the note looks like a name (letters and spaces, no @ or http), set as purchaser name
+                            if (!productData.purchaseName && /^[A-Za-z .,'-]+$/.test(noteText.trim()) && !noteText.includes('@') && !noteText.toLowerCase().includes('http')) {
+                                productData.purchaseName = noteText.trim();
+                            }
+                        }
+                    }
                     if (existing) {
-                        // Update existing
-                        if (colMap.name !== undefined) existing.name = rowData[colMap.name] || existing.name;
-                        if (colMap.cost !== undefined) existing.cost = parseFloat(rowData[colMap.cost]) || existing.cost;
-                        if (colMap.price !== undefined) existing.price = parseFloat(rowData[colMap.price]) || existing.price;
-                        if (colMap.quantity !== undefined) existing.quantity = parseInt(rowData[colMap.quantity]) || existing.quantity;
-                        if (colMap.location !== undefined) existing.location = rowData[colMap.location] || existing.location;
-                        if (colMap.hyperlink !== undefined) existing.hyperlink = rowData[colMap.hyperlink] || existing.hyperlink;
-                        if (colMap.notes !== undefined) {
-                            const noteText = rowData[colMap.notes];
-                            if (noteText) existing.notes.push({type: 'Product', text: noteText});
-                        }
+                        Object.assign(existing, productData);
                     } else {
-                        // Add new
-                        const product = {
-                            sku: sku,
-                            name: rowData[colMap.name] || '',
-                            cost: parseFloat(rowData[colMap.cost]) || 0,
-                            price: parseFloat(rowData[colMap.price]) || 0,
-                            quantity: parseInt(rowData[colMap.quantity]) || 0,
-                            location: rowData[colMap.location] || '',
-                            hyperlink: rowData[colMap.hyperlink] || '',
-                            notes: []
+                        const newProduct = {
+                            sku,
+                            name: '',
+                            cost: 0,
+                            price: 0,
+                            quantity: 0,
+                            location: '',
+                            hyperlink: '',
+                            notes: [],
+                            purchaseName: '',
+                            purchaseSource: '',
+                            condition: '',
+                            descPuDate: '',
+                            asin: '',
+                            listDate: '',
+                            soldDate: '',
+                            retail: '',
+                            soldFor: '',
+                            profit: '',
+                            totalPrice: '',
+                            ...productData
                         };
-                        if (colMap.notes !== undefined && rowData[colMap.notes]) {
-                            product.notes.push({type: 'Product', text: rowData[colMap.notes]});
-                        }
-                        products.push(product);
-                        addedCount++;
+                        products.push(newProduct);
+                        productsBySku.set(sku, newProduct);
                     }
                 }
-                
-                alert(`Sheet ${sheetName}: Added ${addedCount} new products.`);
-                totalAdded += addedCount;
             });
-            
-            alert(`Total import completed. Added ${totalAdded} new products from all sheets.`);
-            
             saveData();
-            alert('Spreadsheet imported successfully!');
             showInventory();
         } catch (error) {
             alert('Error parsing spreadsheet: ' + error.message);
@@ -199,28 +308,24 @@ function showAddProductForm() {
         <form id="addProductForm">
             <label for="sku">SKU:</label>
             <input type="text" id="sku" required>
-            
             <label for="name">Product Name:</label>
             <input type="text" id="name" required>
-            
             <label for="cost">Cost:</label>
             <input type="number" id="cost" step="0.01" required>
-            
             <label for="price">Selling Price:</label>
             <input type="number" id="price" step="0.01" required>
-            
             <label for="quantity">Quantity:</label>
             <input type="number" id="quantity" required>
-            
             <label for="location">Location:</label>
             <input type="text" id="location">
-            
             <label for="hyperlink">Hyperlink:</label>
             <input type="url" id="hyperlink">
-            
+            <label for="purchaseName">Purchase Name:</label>
+            <input type="text" id="purchaseName">
+            <label for="purchaseSource">Source of Purchase:</label>
+            <input type="text" id="purchaseSource">
             <label for="notes">Notes:</label>
             <textarea id="notes"></textarea>
-            
             <button type="submit">Add Product</button>
         </form>
     `;
@@ -237,17 +342,16 @@ function addProduct(e) {
     const quantity = parseInt(document.getElementById('quantity').value);
     const location = document.getElementById('location').value;
     const hyperlink = document.getElementById('hyperlink').value;
+    const purchaseName = document.getElementById('purchaseName').value;
+    const purchaseSource = document.getElementById('purchaseSource').value;
     const notesText = document.getElementById('notes').value;
-    
     // Check if SKU already exists
     if (products.find(p => p.sku === sku)) {
         alert('SKU already exists!');
         return;
     }
-    
     const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-    
-    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes });
+    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
     saveData();
     alert('Product added successfully!');
     showInventory();
@@ -264,28 +368,24 @@ function editProduct(sku) {
         <form id="editProductForm">
             <label for="editSku">SKU:</label>
             <input type="text" id="editSku" value="${product.sku}" required>
-            
             <label for="editName">Product Name:</label>
             <input type="text" id="editName" value="${product.name}" required>
-            
             <label for="editCost">Cost:</label>
             <input type="number" id="editCost" step="0.01" value="${product.cost}" required>
-            
             <label for="editPrice">Selling Price:</label>
             <input type="number" id="editPrice" step="0.01" value="${product.price}" required>
-            
             <label for="editQuantity">Quantity:</label>
             <input type="number" id="editQuantity" value="${product.quantity}" required>
-            
             <label for="editLocation">Location:</label>
             <input type="text" id="editLocation" value="${product.location}">
-            
             <label for="editHyperlink">Hyperlink:</label>
             <input type="url" id="editHyperlink" value="${product.hyperlink}">
-            
+            <label for="editPurchaseName">Purchase Name:</label>
+            <input type="text" id="editPurchaseName" value="${product.purchaseName || ''}">
+            <label for="editPurchaseSource">Source of Purchase:</label>
+            <input type="text" id="editPurchaseSource" value="${product.purchaseSource || ''}">
             <label for="editNotes">Notes:</label>
             <textarea id="editNotes">${notesText}</textarea>
-            
             <button type="submit">Update Product</button>
             <button type="button" onclick="showInventory()">Cancel</button>
         </form>
@@ -303,23 +403,21 @@ function updateProduct(e, oldSku) {
     const quantity = parseInt(document.getElementById('editQuantity').value);
     const location = document.getElementById('editLocation').value;
     const hyperlink = document.getElementById('editHyperlink').value;
+    const purchaseName = document.getElementById('editPurchaseName').value;
+    const purchaseSource = document.getElementById('editPurchaseSource').value;
     const notesText = document.getElementById('editNotes').value;
-    
     const productIndex = products.findIndex(p => p.sku === oldSku);
     if (productIndex === -1) return;
-    
     // Check if new SKU already exists (if changed)
     if (newSku !== oldSku && products.find(p => p.sku === newSku)) {
         alert('SKU already exists!');
         return;
     }
-    
     const notes = notesText.split('\n').map(line => {
         const [type, ...textParts] = line.split(': ');
         return {type: type || 'Product', text: textParts.join(': ') || line};
     }).filter(note => note.text.trim());
-    
-    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes };
+    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
     saveData();
     alert('Product updated successfully!');
     showInventory();
@@ -327,16 +425,178 @@ function updateProduct(e, oldSku) {
 
 function showScanForm() {
     mainContent.innerHTML = `
-        <h2>Scan SKU</h2>
+        <h2>Scan SKU (Barcode or Manual)</h2>
+        <div style="color:#555;font-size:1em;margin-bottom:0.5em;">
+            <b>Tip:</b> Place the barcode in the center of the box, hold steady, and ensure good lighting. For best results, use a clean camera lens and avoid glare.
+        </div>
+        <div id="barcodeArea" style="margin-bottom:1rem;"></div>
+        <div id="cameraStatus" style="color:#237804;font-size:1em;margin-bottom:0.5em;"></div>
+        <button id="startCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
         <form id="scanForm">
             <label for="scanSku">Enter or Scan SKU:</label>
-            <input type="text" id="scanSku" required autofocus>
-            
-            <button type="submit">Mark as Sold</button>
+            <input type="text" id="scanSku" required autocomplete="off">
+            <button type="submit">Submit</button>
         </form>
+        <div id="scanResult" style="margin-top:1rem;"></div>
     `;
-    
-    document.getElementById('scanForm').addEventListener('submit', scanSku);
+    let html5Qr = null;
+    let cameraActive = false;
+    let lastScanError = '';
+    let cameraStarting = false;
+    async function stopCamera() {
+        if (html5Qr && cameraActive) {
+            try {
+                await html5Qr.stop();
+            } catch (e) {}
+            cameraActive = false;
+        }
+    }
+    function updateCameraStatus(msg, color) {
+        const statusDiv = document.getElementById('cameraStatus');
+        if (statusDiv) {
+            statusDiv.textContent = msg;
+            statusDiv.style.color = color || '#237804';
+        }
+    }
+    async function startCamera() {
+        if (cameraStarting) return;
+        cameraStarting = true;
+        await stopCamera();
+        const barcodeArea = document.getElementById('barcodeArea');
+        barcodeArea.innerHTML = '<div id="reader" style="width:400px;max-width:100vw;"></div>';
+        updateCameraStatus('Starting camera...', '#237804');
+        if (!window.Html5Qrcode) {
+            barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner library not loaded. Please check your internet connection and reload the page.</div>';
+            updateCameraStatus('Barcode scanner library not loaded.', 'red');
+            cameraStarting = false;
+            return;
+        }
+        if (html5Qr) {
+            try { await html5Qr.stop(); } catch(e){}
+        }
+        html5Qr = new Html5Qrcode("reader");
+        let scanErrorTimeout = null;
+        Html5Qrcode.getCameras().then(cameras => {
+            if (cameras && cameras.length) {
+                updateCameraStatus('Camera found. Initializing scan...', '#237804');
+                html5Qr.start(
+                    { facingMode: "environment" },
+                    { fps: 2, qrbox: 380 }, // even less sensitive: lower fps, much bigger box
+                    async (decodedText, decodedResult) => {
+                        updateCameraStatus('Barcode detected: ' + decodedText, '#237804');
+                        document.getElementById('scanSku').value = decodedText;
+                        await stopCamera();
+                        handleScanSku(decodedText);
+                    },
+                    (errorMsg) => {
+                        lastScanError = errorMsg;
+                        if (scanErrorTimeout) return; // prevent rapid error updates
+                        updateCameraStatus('Scanning... (last error: ' + errorMsg + ')', 'orange');
+                        scanErrorTimeout = setTimeout(() => { scanErrorTimeout = null; }, 800); // 0.8s delay
+                    }
+                ).then(() => { cameraActive = true; updateCameraStatus('Camera active. Point barcode at camera.', '#237804'); cameraStarting = false; })
+                .catch(err => {
+                    barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
+                    updateCameraStatus('Camera error: ' + err, 'red');
+                    cameraStarting = false;
+                });
+            } else {
+                barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
+                updateCameraStatus('No camera found.', 'red');
+                cameraStarting = false;
+            }
+        }).catch(err => {
+            barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
+            updateCameraStatus('Camera access denied.', 'red');
+            cameraStarting = false;
+        });
+    }
+    document.getElementById('startCameraBtn').onclick = function() {
+        startCamera();
+    };
+    // Do not auto-start camera. Only start when user presses button.
+    document.getElementById('scanForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const sku = document.getElementById('scanSku').value;
+        handleScanSku(sku);
+    });
+    function handleScanSku(sku) {
+        const product = products.find(p => p.sku === sku);
+        const scanResult = document.getElementById('scanResult');
+        if (!product) {
+            // Show add product form with SKU pre-filled
+            scanResult.innerHTML = `
+                <span style='color:orange;'>Product not found! Add new product to inventory:</span>
+                <form id="addScannedProductForm" style="margin-top:1em;">
+                    <label>SKU:<br><input type="text" id="newSku" value="${sku}" required readonly></label><br>
+                    <label>Name:<br><input type="text" id="newName" required></label><br>
+                    <label>Cost:<br><input type="number" id="newCost" step="0.01" required></label><br>
+                    <label>Price:<br><input type="number" id="newPrice" step="0.01" required></label><br>
+                    <label>Quantity:<br><input type="number" id="newQuantity" value="1" required></label><br>
+                    <label>Location:<br><input type="text" id="newLocation"></label><br>
+                    <label>Hyperlink:<br><input type="url" id="newHyperlink"></label><br>
+                    <label>Purchase Name:<br><input type="text" id="newPurchaseName"></label><br>
+                    <label>Source of Purchase:<br><input type="text" id="newPurchaseSource"></label><br>
+                    <label>Notes:<br><textarea id="newNotes"></textarea></label><br>
+                    <button type="submit">Add Product</button>
+                </form>
+            `;
+            document.getElementById('addScannedProductForm').onsubmit = function(e) {
+                e.preventDefault();
+                const sku = document.getElementById('newSku').value;
+                const name = document.getElementById('newName').value;
+                const cost = parseFloat(document.getElementById('newCost').value);
+                const price = parseFloat(document.getElementById('newPrice').value);
+                const quantity = parseInt(document.getElementById('newQuantity').value);
+                const location = document.getElementById('newLocation').value;
+                const hyperlink = document.getElementById('newHyperlink').value;
+                const purchaseName = document.getElementById('newPurchaseName').value;
+                const purchaseSource = document.getElementById('newPurchaseSource').value;
+                const notesText = document.getElementById('newNotes').value;
+                if (products.find(p => p.sku === sku)) {
+                    alert('SKU already exists!');
+                    return;
+                }
+                const notes = notesText ? [{type: 'Product', text: notesText}] : [];
+                products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+                saveData();
+                scanResult.innerHTML = `<span style='color:green;'>Product added successfully!</span>`;
+                showInventory();
+            };
+            return;
+        }
+        scanResult.innerHTML = `<b>Product:</b> ${product.name} (SKU: ${product.sku})<br>Current Quantity: ${product.quantity}<br><button id="addBtn">Add to Inventory</button> <button id="subtractBtn">Subtract from Inventory</button>`;
+        document.getElementById('addBtn').onclick = function() {
+            product.quantity += 1;
+            saveData();
+            scanResult.innerHTML = `<span style='color:green;'>Added 1. New quantity: ${product.quantity}</span>`;
+            showInventory();
+        };
+        document.getElementById('subtractBtn').onclick = function() {
+            if (product.quantity <= 0) {
+                scanResult.innerHTML = '<span style="color:red;">Product out of stock!</span>';
+                return;
+            }
+            product.quantity -= 1;
+            // Record sale
+            const saleAmount = product.price;
+            revenue += saleAmount;
+            const profit = (product.price - product.cost) * 1;
+            sales.push({
+                sku: product.sku,
+                name: product.name,
+                quantity: 1,
+                price: product.price,
+                total: saleAmount,
+                profit: profit,
+                date: new Date().toLocaleString(),
+                pickedUp: false
+            });
+            saveData();
+            scanResult.innerHTML = `<span style='color:orange;'>Subtracted 1 (sold). New quantity: ${product.quantity}. Sale recorded.</span>`;
+            showInventory();
+        };
+    }
 }
 
 function scanSku(e) {
@@ -382,9 +642,19 @@ function showInventory(sortByLocation = false) {
         }
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="locationSearch" placeholder="Search by location"><button onclick="filterByLocation()">Search</button><button onclick="clearLocationSearch()">Clear</button><br>`;
+        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
+        // Pagination controls
+        const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
+        if (inventoryPage > totalPages) inventoryPage = totalPages;
+        if (inventoryPage < 1) inventoryPage = 1;
+        if (filteredProducts.length > ITEMS_PER_PAGE) {
+            html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${inventoryPage}</span> of ${totalPages} ` +
+                `<button onclick='prevInventoryPage()' ${inventoryPage === 1 ? 'disabled' : ''}>&lt; Prev</button> ` +
+                `<button onclick='nextInventoryPage()' ${inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
+        }
         if (filteredProducts.length === 0) {
             html += '<p>No products match the search.</p>';
         } else {
@@ -392,53 +662,161 @@ function showInventory(sortByLocation = false) {
                 <table>
                     <thead>
                         <tr>
+                            <th>Condition</th>
+                            <th>Desc/PU Date</th>
+                            <th>ASIN</th>
+                            <th>Item Title</th>
+                            <th>Qty</th>
+                            <th>Item Price</th>
+                            <th>Total Price</th>
                             <th>SKU</th>
-                            <th>Name</th>
-                            <th>Cost</th>
-                            <th>Price</th>
-                            <th>Quantity</th>
-                            <th>Location</th>
-                            <th>Hyperlink</th>
+                            <th>Loc</th>
+                            <th>List Date</th>
+                            <th>Sold Date</th>
+                            <th>Retail</th>
+                            <th>Sold For</th>
+                            <th>Profit</th>
+                            <th>Purchaser</th>
                             <th>Notes</th>
-                            <th>Availability</th>
+                            <th>Link</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
-            filteredProducts.forEach(product => {
-                const availability = product.quantity > 0 ? 'Available' : 'Out of Stock';
-                const hyperlink = product.hyperlink ? `<a href="${product.hyperlink}" target="_blank">${product.hyperlink}</a>` : 'No Link';
-                
-                // Check if product name is a URL and make it clickable
-                let nameDisplay = product.name || '';
-                if (nameDisplay && (nameDisplay.startsWith('http://') || nameDisplay.startsWith('https://'))) {
-                    nameDisplay = `<a href="${nameDisplay}" target="_blank" style="color: blue; text-decoration: underline;">${nameDisplay}</a>`;
+            const startIdx = (inventoryPage - 1) * ITEMS_PER_PAGE;
+            const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
+            for (let i = startIdx; i < endIdx; i++) {
+                const product = filteredProducts[i];
+                // Ensure all fields are present
+                const condition = product.condition || '';
+                const descPuDate = product.descPuDate || '';
+                const asin = product.asin || '';
+                let name = product.name || '';
+                // If Item Title looks like a URL, make it clickable
+                if (name) {
+                    let url = name.trim();
+                    if (!/^https?:\/\//i.test(url) && /\./.test(url) && !/\s/.test(url)) {
+                        url = 'https://' + url;
+                    }
+                    if (/^https?:\/\/.+\..+/.test(url) && !/\s/.test(url)) {
+                        name = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.name}</a>`;
+                    }
                 }
-                
-                const notes = product.notes && Array.isArray(product.notes) ? product.notes.map(note => {
-                    const color = note.type === 'Priority' ? 'red' : note.type === 'Self' ? 'blue' : 'green';
-                    return `<span style="color: ${color};">${note.type}: ${note.text}</span>`;
-                }).join('<br>') : '';
-                const escapedSku = (product.sku || '').replace(/'/g, "\\'");
+                const quantity = product.quantity || 0;
+                const price = product.price ? Number(product.price) : 0;
+                const totalPrice = product.totalPrice ? Number(product.totalPrice) : (price && quantity ? price * quantity : 0);
+                const sku = product.sku || '';
+                const location = product.location || '';
+                const listDate = product.listDate || '';
+                const soldDate = product.soldDate || '';
+                const retail = product.retail ? Number(product.retail) : 0;
+                const soldFor = product.soldFor ? Number(product.soldFor) : 0;
+                // Calculate profit if possible
+                let profit = '';
+                if (soldFor && retail) {
+                    profit = (soldFor - retail).toFixed(2);
+                } else if (soldFor && price) {
+                    profit = (soldFor - price).toFixed(2);
+                } else if (product.profit !== undefined && product.profit !== '') {
+                    profit = Number(product.profit).toFixed(2);
+                }
+                // Purchaser: use purchaseName, or extract from notes if missing
+                let purchaser = product.purchaseName || '';
+                const notesArr = product.notes && Array.isArray(product.notes) ? product.notes.map(note => note.text) : [];
+                if (!purchaser && notesArr.length > 0) {
+                    const nameCandidate = notesArr.find(n => /^[A-Za-z .,'-]+$/.test(n.trim()) && !n.includes('@') && !n.toLowerCase().includes('http'));
+                    if (nameCandidate) purchaser = nameCandidate.trim();
+                }
+                const notes = notesArr.filter(n => n !== purchaser).join('; ');
+                // Hyperlink: always clickable if present, always prepends https:// if missing
+                let hyperlink = '';
+                if (product.hyperlink) {
+                    let url = product.hyperlink.trim();
+                    if (!/^https?:\/\//i.test(url)) {
+                        url = 'https://' + url;
+                    }
+                    // Only render if it looks like a valid URL (contains a dot and no spaces)
+                    if (/^https?:\/\/.+\..+/.test(url) && !/\s/.test(url)) {
+                        hyperlink = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
+                    }
+                }
+                const escapedSku = (sku).replace(/'/g, "\\'");
                 html += `
                     <tr>
-                        <td>${product.sku || ''}</td>
-                        <td>${nameDisplay}</td>
-                        <td>$${product.cost ? product.cost.toFixed(2) : '0.00'}</td>
-                        <td>$${product.price ? product.price.toFixed(2) : '0.00'}</td>
-                        <td>${product.quantity || 0}</td>
-                        <td>${product.location || ''}</td>
-                        <td>${hyperlink}</td>
+                        <td>${condition}</td>
+                        <td>${descPuDate}</td>
+                        <td>${asin}</td>
+                        <td>${name}</td>
+                        <td>${quantity}</td>
+                        <td>$${price ? price.toFixed(2) : ''}</td>
+                        <td>$${totalPrice ? totalPrice.toFixed(2) : ''}</td>
+                        <td>${sku}</td>
+                        <td>${location}</td>
+                        <td>${listDate}</td>
+                        <td>${soldDate}</td>
+                        <td>$${retail ? retail.toFixed(2) : ''}</td>
+                        <td>$${soldFor ? soldFor.toFixed(2) : ''}</td>
+                        <td>$${profit}</td>
+                        <td>${purchaser}</td>
                         <td>${notes}</td>
-                        <td>${availability}</td>
+                        <td>${hyperlink}</td>
                         <td><button onclick="editProduct('${escapedSku}')">Edit</button></td>
                     </tr>
                 `;
-            });
+            }
             html += '</tbody></table>';
         }
         mainContent.innerHTML = html;
+        // Attach search events
+        setTimeout(() => {
+            const kwInput = document.getElementById('keywordSearch');
+            const kwBtn = document.getElementById('keywordSearchBtn');
+            if (kwInput) {
+                kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
+            }
+            if (kwBtn) {
+                kwBtn.onclick = filterByKeyword;
+            }
+        }, 0);
+    // Advanced search by any field, min 3 letters
+    function filterByKeyword() {
+        const input = document.getElementById('keywordSearch');
+        if (!input) return;
+        const term = input.value.trim().toLowerCase();
+        if (term.length < 3) {
+            alert('Enter at least 3 letters to search.');
+            return;
+        }
+        filteredProducts = products.filter(p => {
+            return Object.keys(p).some(key => {
+                let val = p[key];
+                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
+                if (Array.isArray(val)) {
+                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
+                }
+                return false;
+            });
+        });
+        inventoryPage = 1;
+        showInventory(isSortedByLocation);
+    }
+    function clearKeywordSearch() {
+        const input = document.getElementById('keywordSearch');
+        if (input) input.value = '';
+        filteredProducts = products;
+        inventoryPage = 1;
+        showInventory(isSortedByLocation);
+    }
+    // Pagination controls
+    function nextInventoryPage() {
+        inventoryPage++;
+        showInventory(isSortedByLocation);
+    }
+    function prevInventoryPage() {
+        inventoryPage--;
+        showInventory(isSortedByLocation);
+    }
     } catch (error) {
         alert('Error displaying inventory: ' + error.message);
     }
@@ -450,6 +828,8 @@ function showMakeSaleForm() {
         html += '<p>No products available for sale.</p>';
     } else {
         html += `
+            <button id="startSaleCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
+            <div id="saleBarcodeArea" style="margin-bottom:1rem;"></div>
             <form id="makeSaleForm">
                 <label for="productSelect">Select Product:</label>
                 <select id="productSelect" required>
@@ -462,16 +842,59 @@ function showMakeSaleForm() {
         });
         html += `
                 </select>
-                
                 <label for="saleQuantity">Quantity:</label>
                 <input type="number" id="saleQuantity" min="1" required>
-                
                 <button type="submit">Complete Sale</button>
             </form>
         `;
     }
     mainContent.innerHTML = html;
-    
+    // Camera logic for Make Sale
+    let saleQr = null;
+    let saleCameraActive = false;
+    async function stopSaleCamera() {
+        if (saleQr && saleCameraActive) {
+            try { await saleQr.stop(); } catch (e) {}
+            saleCameraActive = false;
+        }
+    }
+    document.getElementById('startSaleCameraBtn')?.addEventListener('click', async function() {
+        const barcodeArea = document.getElementById('saleBarcodeArea');
+        await stopSaleCamera();
+        barcodeArea.innerHTML = '<div id="saleReader" style="width:400px;max-width:100vw;"></div>';
+        if (window.Html5Qrcode) {
+            saleQr = new Html5Qrcode("saleReader");
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length) {
+                    saleQr.start(
+                        { facingMode: "environment" },
+                        { fps: 2, qrbox: 380 }, // match inventory scan settings
+                        (decodedText, decodedResult) => {
+                            // Try to select product by SKU
+                            const idx = products.findIndex(p => p.sku === decodedText && p.quantity > 0);
+                            if (idx !== -1) {
+                                document.getElementById('productSelect').value = idx;
+                                barcodeArea.innerHTML = `<span style='color:green;'>Product selected: ${products[idx].name} (SKU: ${products[idx].sku})</span>`;
+                                stopSaleCamera();
+                            } else {
+                                barcodeArea.innerHTML = `<span style='color:red;'>SKU not found or out of stock: ${decodedText}</span>`;
+                            }
+                        },
+                        (errorMsg) => {}
+                    ).then(() => { saleCameraActive = true; })
+                    .catch(err => {
+                        barcodeArea.innerHTML = '<div style="color:red;">Camera error: ' + err + '</div>';
+                    });
+                } else {
+                    barcodeArea.innerHTML = '<div style="color:red;">No camera found.</div>';
+                }
+            }).catch(err => {
+                barcodeArea.innerHTML = '<div style="color:red;">Camera access denied.</div>';
+            });
+        } else {
+            barcodeArea.innerHTML = '<div style="color:red;">Barcode scanner not loaded.</div>';
+        }
+    });
     if (products.some(p => p.quantity > 0)) {
         document.getElementById('makeSaleForm').addEventListener('submit', makeSale);
     }

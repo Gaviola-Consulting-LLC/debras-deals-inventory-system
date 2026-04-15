@@ -134,7 +134,7 @@ function formatDescPuDateMMDDYY(value) {
     }
 
     const parts = formatted.split('/');
-    if (parts.length !== 3 || !/^\d{4}$/.test(parts[2])) {
+    if (parts.length !== 3) {
         return String(value);
     }
 

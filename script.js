@@ -65,6 +65,13 @@ let sales = JSON.parse(localStorage.getItem('sales')) || [];
 let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
 function formatDateMMDDYYYY(value) {
+    // Two-digit years 70-99 map to 19xx; 00-69 map to 20xx (common spreadsheet/date-parser convention).
+    const TWO_DIGIT_YEAR_CUTOFF = 70;
+    // Days between Excel's 1900-based epoch and Unix epoch (1970-01-01), accounting for Excel's date system offset.
+    const EXCEL_TO_UNIX_DAYS_OFFSET = 25569;
+    // Excel serial date upper bound for 9999-12-31 in the 1900 date system.
+    const MAX_EXCEL_SERIAL_DATE = 2958465;
+
     if (value === null || value === undefined) return '';
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
         const month = String(value.getMonth() + 1).padStart(2, '0');
@@ -91,7 +98,7 @@ function formatDateMMDDYYYY(value) {
     let match = input.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
     if (match) {
         let year = Number(match[3]);
-        if (year < 100) year += (year >= 70 ? 1900 : 2000);
+        if (year < 100) year += (year >= TWO_DIGIT_YEAR_CUTOFF ? 1900 : 2000);
         return formatParts(year, match[1], match[2]);
     }
 
@@ -102,8 +109,10 @@ function formatDateMMDDYYYY(value) {
 
     if (/^\d+(\.\d+)?$/.test(input)) {
         const serial = Number(input);
-        if (serial > 0 && serial < 2958466) {
-            const date = new Date((serial - 25569) * 86400000);
+        if (serial > 0 && serial <= MAX_EXCEL_SERIAL_DATE) {
+            // Excel incorrectly includes a non-existent 1900-02-29 date at serial 60; adjust serials after that point.
+            const adjustedSerial = serial >= 60 ? serial - 1 : serial;
+            const date = new Date((adjustedSerial - EXCEL_TO_UNIX_DAYS_OFFSET) * 86400000);
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
             return `${month}/${day}/${date.getUTCFullYear()}`;

@@ -64,6 +64,68 @@ let products = JSON.parse(localStorage.getItem('products')) || [];
 let sales = JSON.parse(localStorage.getItem('sales')) || [];
 let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
+function formatDateMMDDYYYY(value) {
+    // Two-digit years 70-99 map to 19xx; 00-69 map to 20xx (common spreadsheet/date-parser convention).
+    const TWO_DIGIT_YEAR_CUTOFF = 70;
+    // Days between Excel's 1900-based epoch and Unix epoch (1970-01-01), accounting for Excel's date system offset.
+    const EXCEL_TO_UNIX_DAYS_OFFSET = 25569;
+    // Excel serial date upper bound for 9999-12-31 in the 1900 date system.
+    const MAX_EXCEL_SERIAL_DATE = 2958465;
+
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return `${month}/${day}/${value.getFullYear()}`;
+    }
+    const input = String(value).trim();
+    if (!input) return '';
+
+    const formatParts = (year, month, day) => {
+        const parsedYear = Number(year);
+        const parsedMonth = Number(month);
+        const parsedDay = Number(day);
+        if (!Number.isInteger(parsedYear) || !Number.isInteger(parsedMonth) || !Number.isInteger(parsedDay)) return '';
+        const candidate = new Date(parsedYear, parsedMonth - 1, parsedDay);
+        if (
+            candidate.getFullYear() !== parsedYear ||
+            candidate.getMonth() !== parsedMonth - 1 ||
+            candidate.getDate() !== parsedDay
+        ) return '';
+        return `${String(parsedMonth).padStart(2, '0')}/${String(parsedDay).padStart(2, '0')}/${parsedYear}`;
+    };
+
+    let match = input.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+    if (match) {
+        let year = Number(match[3]);
+        if (year < 100) year += (year >= TWO_DIGIT_YEAR_CUTOFF ? 1900 : 2000);
+        return formatParts(year, match[1], match[2]);
+    }
+
+    match = input.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+    if (match) {
+        return formatParts(match[1], match[2], match[3]);
+    }
+
+    if (/^\d+(\.\d+)?$/.test(input)) {
+        const serial = Number(input);
+        if (serial > 0 && serial <= MAX_EXCEL_SERIAL_DATE) {
+            // Excel incorrectly includes a non-existent 1900-02-29 date at serial 60; adjust serials after that point.
+            const adjustedSerial = serial >= 60 ? serial - 1 : serial;
+            const date = new Date((adjustedSerial - EXCEL_TO_UNIX_DAYS_OFFSET) * 86400000);
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            return `${month}/${day}/${date.getUTCFullYear()}`;
+        }
+    }
+
+    const parsed = new Date(input);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${month}/${day}/${parsed.getFullYear()}`;
+}
+
 // Ensure products have new fields
 products = products.map(p => ({
     sku: p.sku,
@@ -713,8 +775,8 @@ function showInventory(sortByLocation = false) {
                 const totalPrice = parseMoneyValue(product.totalPrice);
                 const sku = product.sku || '';
                 const location = product.location || '';
-                const listDate = product.listDate || '';
-                const soldDate = product.soldDate || '';
+                const listDate = formatDateMMDDYYYY(product.listDate);
+                const soldDate = formatDateMMDDYYYY(product.soldDate);
                 const retail = parseMoneyValue(product.retail);
                 const soldFor = parseMoneyValue(product.soldFor);
                 // Calculate profit as (soldFor - totalPrice) * quantity

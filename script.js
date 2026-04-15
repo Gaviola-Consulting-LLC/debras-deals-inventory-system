@@ -717,10 +717,10 @@ function showInventory(sortByLocation = false) {
                 const soldDate = product.soldDate || '';
                 const retail = parseMoneyValue(product.retail);
                 const soldFor = parseMoneyValue(product.soldFor);
-                // Calculate profit from soldFor - totalPrice only
+                // Calculate profit as (soldFor - totalPrice) * quantity
                 let profit = '';
                 if (soldFor !== null && totalPrice !== null) {
-                    profit = (soldFor - totalPrice).toFixed(2);
+                    profit = ((soldFor - totalPrice) * quantity).toFixed(2);
                 }
                 // Purchaser: use purchaseName, or extract from notes if missing
                 let purchaser = product.purchaseName || '';

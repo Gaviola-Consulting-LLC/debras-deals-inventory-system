@@ -126,6 +126,21 @@ function formatDateMMDDYYYY(value) {
     return `${month}/${day}/${parsed.getFullYear()}`;
 }
 
+function formatDescPuDateMMDDYY(value) {
+    const formatted = formatDateMMDDYYYY(value);
+    if (!formatted) {
+        if (value === null || value === undefined) return '';
+        return String(value);
+    }
+
+    const parts = formatted.split('/');
+    if (parts.length !== 3 || !/^\d{4}$/.test(parts[2])) {
+        return String(value);
+    }
+
+    return `${parts[0]}/${parts[1]}/${parts[2].slice(-2)}`;
+}
+
 // Ensure products have new fields
 products = products.map(p => ({
     sku: p.sku,
@@ -752,7 +767,7 @@ function showInventory(sortByLocation = false) {
                 const product = filteredProducts[i];
                 // Ensure all fields are present
                 const condition = product.condition || '';
-                const descPuDate = product.descPuDate || '';
+                const descPuDate = formatDescPuDateMMDDYY(product.descPuDate);
                 const asin = product.asin || '';
                 let name = product.name || '';
                 // If Item Title looks like a URL, make it clickable

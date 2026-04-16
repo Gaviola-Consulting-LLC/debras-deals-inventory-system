@@ -61,17 +61,21 @@
     }
 
     function fetchInventory(page) {
-        return $.getJSON(inventoryUrl(page)).then(function (response) {
-            var items = response && Array.isArray(response.items) ? response.items : [];
-            var total = response && typeof response.total === 'number' ? response.total : 0;
+        return $.getJSON(inventoryUrl(page))
+            .then(function (response) {
+                var items = response && Array.isArray(response.items) ? response.items : [];
+                var total = response && typeof response.total === 'number' ? response.total : 0;
 
-            state.page = page;
-            state.items = items;
-            state.total = total;
+                state.page = page;
+                state.items = items;
+                state.total = total;
 
-            renderTable(items);
-            renderPagination();
-        });
+                renderTable(items);
+                renderPagination();
+            })
+            .fail(function () {
+                alert('Unable to load inventory for this page. Please try again.');
+            });
     }
 
     function renderTable(items) {
@@ -105,8 +109,8 @@
         }
 
         var totalPages = getTotalPages();
-        var prevDisabled = state.page <= 1 ? 'disabled' : '';
-        var nextDisabled = state.page >= totalPages ? 'disabled' : '';
+        var prevDisabled = state.page <= 1 ? 'disabled="disabled"' : '';
+        var nextDisabled = state.page >= totalPages ? 'disabled="disabled"' : '';
 
         var html = '';
         html += '<button type="button" class="pagination-prev" ' + prevDisabled + '>Previous</button>';
@@ -142,6 +146,8 @@
         }).done(function () {
             state.total = Math.max(0, state.total - 1);
             loadCurrentPageOrPreviousIfEmpty();
+        }).fail(function () {
+            alert('Unable to delete this inventory item. Please try again.');
         });
     }
 

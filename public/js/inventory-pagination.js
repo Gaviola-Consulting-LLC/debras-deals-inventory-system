@@ -34,7 +34,7 @@
         items: []
     };
 
-    var settings = {
+    var defaultSettings = {
         endpoint: '/api/inventory',
         limit: 10,
         tableBodySelector: '#inventory-table tbody',
@@ -43,6 +43,7 @@
         idField: '_id',
         columns: ['name', 'quantity']
     };
+    var settings = $.extend({}, defaultSettings);
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -127,7 +128,6 @@
             if (state.items.length === 0 && state.page > 1) {
                 return fetchInventory(state.page - 1);
             }
-            return null;
         });
     }
 
@@ -179,7 +179,7 @@
     }
 
     function init(options) {
-        settings = $.extend({}, settings, options || {});
+        settings = $.extend({}, defaultSettings, options || {});
         state.limit = Number(settings.limit) > 0 ? Number(settings.limit) : state.limit;
         bindEvents();
         return fetchInventory(state.page);

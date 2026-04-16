@@ -263,7 +263,10 @@ function fetchHyperlinkContent(url) {
         return hyperlinkFetchPromises.get(url);
     }
 
-    const request = fetch(url)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const request = fetch(url, { signal: controller.signal })
         .then(response => {
             if (!response.ok) throw new Error('Failed to fetch URL');
             return response.text();
@@ -278,6 +281,7 @@ function fetchHyperlinkContent(url) {
             return '';
         })
         .finally(() => {
+            clearTimeout(timeoutId);
             hyperlinkFetchPromises.delete(url);
         });
 

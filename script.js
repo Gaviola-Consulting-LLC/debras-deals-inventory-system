@@ -87,7 +87,9 @@ const SPREADSHEET_FIELD_ALIASES = {
     notes: ['notes'],
     hyperlink: ['link', 'hyperlink'],
     orderNumber: ['order #', 'order#', 'order number'],
-    cost: ['cost']
+    cost: ['cost'],
+    purchaseName: ['purchase name'],
+    purchaseSource: ['source of purchase', 'purchase source']
 };
 
 function normalizeText(value) {
@@ -191,6 +193,17 @@ function renderLinkedCell(value) {
         return text;
     }
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+}
+
+function ensureSecureLinkAttributes(scope = document) {
+    if (!scope || !scope.querySelectorAll) {
+        return;
+    }
+    const links = scope.querySelectorAll('a[href]');
+    links.forEach(link => {
+        link.setAttribute('target', '_blank');
+        link.setAttribute('rel', 'noopener noreferrer');
+    });
 }
 
 function calculateInventoryProfit(product) {
@@ -347,12 +360,29 @@ let inventorySortDirection = 'asc';
 let inventoryPage = 1;
 const ITEMS_PER_PAGE = 100;
 const INVENTORY_FILTER_FIELD_OPTIONS = {
+    condition: 'Condition',
+    desc: 'Desc',
     brand: 'Brand',
+    asin: 'ASIN',
+    name: 'Item Title',
     seller: 'Seller',
+    quantity: 'Qty',
+    price: 'Item Price',
+    totalPrice: 'Total Price',
+    sku: 'SKU',
+    location: 'Loc',
     receivedDate: "Rec'd",
     listDate: 'List Date',
     soldDate: 'Sold Date',
-    orderNumber: 'Order #'
+    retail: 'Retail',
+    soldFor: 'Sold For',
+    profit: 'Profit',
+    notes: 'Notes',
+    hyperlink: 'Link',
+    orderNumber: 'Order #',
+    cost: 'Cost',
+    purchaseName: 'Purchase Name',
+    purchaseSource: 'Source of Purchase'
 };
 // Patch: Expose pagination functions globally so HTML buttons work
 window.nextInventoryPage = function() {
@@ -373,6 +403,13 @@ const scanSkuBtn = document.getElementById('scanSkuBtn');
 const makeSaleBtn = document.getElementById('makeSaleBtn');
 const salesSummaryBtn = document.getElementById('salesSummaryBtn');
 const salesDetailsBtn = document.getElementById('salesDetailsBtn');
+
+if (mainContent && typeof MutationObserver !== 'undefined') {
+    const secureLinksObserver = new MutationObserver(() => {
+        ensureSecureLinkAttributes(mainContent);
+    });
+    secureLinksObserver.observe(mainContent, {childList: true, subtree: true});
+}
 
 // Event listeners
 uploadSpreadsheetBtn.addEventListener('click', showUploadForm);
@@ -414,7 +451,15 @@ function getInventoryFieldPlaceholder() {
     if (inventoryFieldFilter && INVENTORY_FILTER_FIELD_OPTIONS[inventoryFieldFilter]) {
         return `Filter by ${INVENTORY_FILTER_FIELD_OPTIONS[inventoryFieldFilter]}`;
     }
-    return "Choose Brand, Seller, Rec'd, List Date, Sold Date, or Order #";
+    return 'Choose a field to filter';
+}
+
+function getFilterableFieldValue(product, field) {
+    const value = product[field];
+    if (Array.isArray(value)) {
+        return value.map(note => (note && typeof note.text === 'string' ? note.text : '')).join(' ');
+    }
+    return normalizeText(value);
 }
 
 function getSortableHeaderLabel(label, field) {
@@ -445,7 +490,7 @@ function applyInventoryFiltersAndSorting() {
     }
 
     if (inventoryFieldFilter && inventoryFieldTerm) {
-        nextProducts = nextProducts.filter(product => normalizeText(product[inventoryFieldFilter]).toLowerCase().includes(inventoryFieldTerm));
+        nextProducts = nextProducts.filter(product => getFilterableFieldValue(product, inventoryFieldFilter).toLowerCase().includes(inventoryFieldTerm));
     }
 
     if (inventorySortField) {
@@ -537,6 +582,7 @@ function uploadSpreadsheet(e) {
                     quantity: parseIntegerOrBlank(getWorksheetCellValue(worksheet, r, colMap.quantity)),
                     price: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.price)),
                     totalPrice: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.totalPrice)),
+                    cost: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.cost)),
                     location: normalizeText(getWorksheetCellValue(worksheet, r, colMap.location)),
                     receivedDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.receivedDate)),
                     listDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.listDate)),
@@ -546,6 +592,8 @@ function uploadSpreadsheet(e) {
                     profit: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.profit)),
                     hyperlink: normalizeText(getWorksheetCellValue(worksheet, r, colMap.hyperlink)),
                     orderNumber: normalizeText(getWorksheetCellValue(worksheet, r, colMap.orderNumber)),
+                    purchaseName: normalizeText(getWorksheetCellValue(worksheet, r, colMap.purchaseName)),
+                    purchaseSource: normalizeText(getWorksheetCellValue(worksheet, r, colMap.purchaseSource)),
                     notes: []
                 };
 
@@ -987,17 +1035,15 @@ function showInventory(sortByLocation = false) {
         applyInventoryFiltersAndSorting();
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="keywordSearch" value="${inventoryKeywordTerm}" placeholder="Search Item Title, Brand, Seller, Rec'd, Order #, SKU..." style="width:320px;max-width:90vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="keywordSearch" value="${inventoryKeywordTerm}" placeholder="Search any inventory field..." style="width:320px;max-width:90vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
         html += `<input type="text" id="locationSearch" value="${inventoryLocationTerm}" placeholder="Search by Loc" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         html += `<select id="fieldFilterSelect" onchange="updateInventoryFieldPlaceholder()" style="margin-top:0.5rem;">
-            <option value="">Filter field</option>
-            <option value="brand" ${inventoryFieldFilter === 'brand' ? 'selected' : ''}>Brand</option>
-            <option value="seller" ${inventoryFieldFilter === 'seller' ? 'selected' : ''}>Seller</option>
-            <option value="receivedDate" ${inventoryFieldFilter === 'receivedDate' ? 'selected' : ''}>Rec'd</option>
-            <option value="listDate" ${inventoryFieldFilter === 'listDate' ? 'selected' : ''}>List Date</option>
-            <option value="soldDate" ${inventoryFieldFilter === 'soldDate' ? 'selected' : ''}>Sold Date</option>
-            <option value="orderNumber" ${inventoryFieldFilter === 'orderNumber' ? 'selected' : ''}>Order #</option>
-        </select> `;
+            <option value="">Filter field</option>`;
+        Object.keys(INVENTORY_FILTER_FIELD_OPTIONS).forEach(field => {
+            const selected = inventoryFieldFilter === field ? 'selected' : '';
+            html += `<option value="${field}" ${selected}>${INVENTORY_FILTER_FIELD_OPTIONS[field]}</option>`;
+        });
+        html += `</select> `;
         html += `<input type="text" id="fieldFilterValue" value="${inventoryFieldTerm}" placeholder="${getInventoryFieldPlaceholder()}" style="width:220px;max-width:70vw;"> <button onclick="filterBySelectedField()">Apply</button> <button onclick="clearFieldFilter()">Clear</button> `;
         html += `<select id="sortFieldSelect" onchange="applySortField()" style="margin-top:0.5rem;">
             <option value="" ${inventorySortField === '' ? 'selected' : ''}>Default sort</option>
@@ -1107,6 +1153,7 @@ function showInventory(sortByLocation = false) {
             html += '</tbody></table>';
         }
         mainContent.innerHTML = html;
+        ensureSecureLinkAttributes(mainContent);
         // Attach search events
         setTimeout(() => {
             const kwInput = document.getElementById('keywordSearch');
@@ -1393,7 +1440,7 @@ function filterBySelectedField() {
     const field = fieldSelect.value;
     const term = fieldInput.value.trim().toLowerCase();
     if (!field) {
-        alert("Choose Brand, Seller, Rec'd, List Date, Sold Date, or Order # first.");
+        alert('Choose a filter field first.');
         return;
     }
     if (term.length < 1) {
@@ -1414,7 +1461,7 @@ function clearFieldFilter() {
     }
     if (fieldInput) {
         fieldInput.value = '';
-        fieldInput.placeholder = "Choose Brand, Seller, Rec'd, List Date, Sold Date, or Order #";
+        fieldInput.placeholder = getInventoryFieldPlaceholder();
     }
     inventoryFieldFilter = '';
     inventoryFieldTerm = '';

@@ -64,143 +64,272 @@ let products = JSON.parse(localStorage.getItem('products')) || [];
 let sales = JSON.parse(localStorage.getItem('sales')) || [];
 let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
+const CANONICAL_SPREADSHEET_NAME = 'Debras inventory spreadsheet_1.xlsx';
+const CANONICAL_SHEET_NAME = 'Fresh Start';
+const SPREADSHEET_FIELD_ALIASES = {
+    condition: ['condition'],
+    desc: ['desc', 'description', 'desc/pu date', 'desc pu date'],
+    brand: ['brand'],
+    asin: ['asin'],
+    name: ['item title', 'name', 'title'],
+    seller: ['seller'],
+    quantity: ['qty', 'quantity'],
+    price: ['item price', 'price'],
+    totalPrice: ['total price'],
+    sku: ['sku'],
+    location: ['loc', 'location'],
+    receivedDate: ["rec'd", 'received', 'recd'],
+    listDate: ['list date'],
+    soldDate: ['sold date'],
+    retail: ['retail'],
+    soldFor: ['sold for'],
+    profit: ['profit'],
+    notes: ['notes'],
+    hyperlink: ['link', 'hyperlink'],
+    orderNumber: ['order #', 'order#', 'order number'],
+    cost: ['cost']
+};
+
+function normalizeText(value) {
+    return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function parseNumberOrBlank(value) {
+    if (value === undefined || value === null || value === '') {
+        return '';
+    }
+    const normalizedValue = typeof value === 'number' ? value : parseFloat(String(value).replace(/[$,]/g, '').trim());
+    return Number.isFinite(normalizedValue) ? normalizedValue : '';
+}
+
+function parseIntegerOrBlank(value) {
+    if (value === undefined || value === null || value === '') {
+        return '';
+    }
+    const normalizedValue = typeof value === 'number' ? value : parseInt(String(value).replace(/,/g, '').trim(), 10);
+    return Number.isFinite(normalizedValue) ? normalizedValue : '';
+}
+
+function padDatePart(value) {
+    return String(value).padStart(2, '0');
+}
+
 function formatDateMMDDYYYY(value) {
-    // Two-digit years 70-99 map to 19xx; 00-69 map to 20xx (common spreadsheet/date-parser convention).
-    const TWO_DIGIT_YEAR_CUTOFF = 70;
-    // Days between Excel's 1900-based epoch and Unix epoch (1970-01-01), accounting for Excel's date system offset.
-    const EXCEL_TO_UNIX_DAYS_OFFSET = 25569;
-    // Excel serial date upper bound for 9999-12-31 in the 1900 date system.
-    const MAX_EXCEL_SERIAL_DATE = 2958465;
+    if (value === undefined || value === null || value === '') {
+        return '';
+    }
 
-    if (value === null || value === undefined) return '';
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
-        const month = String(value.getMonth() + 1).padStart(2, '0');
-        const day = String(value.getDate()).padStart(2, '0');
-        return `${month}/${day}/${value.getFullYear()}`;
-    }
-    const input = String(value).trim();
-    if (!input) return '';
-
-    const formatParts = (year, month, day) => {
-        const parsedYear = Number(year);
-        const parsedMonth = Number(month);
-        const parsedDay = Number(day);
-        if (!Number.isInteger(parsedYear) || !Number.isInteger(parsedMonth) || !Number.isInteger(parsedDay)) return '';
-        const candidate = new Date(parsedYear, parsedMonth - 1, parsedDay);
-        if (
-            candidate.getFullYear() !== parsedYear ||
-            candidate.getMonth() !== parsedMonth - 1 ||
-            candidate.getDate() !== parsedDay
-        ) return '';
-        return `${String(parsedMonth).padStart(2, '0')}/${String(parsedDay).padStart(2, '0')}/${parsedYear}`;
-    };
-
-    let match = input.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-    if (match) {
-        let year = Number(match[3]);
-        if (year < 100) year += (year >= TWO_DIGIT_YEAR_CUTOFF ? 1900 : 2000);
-        return formatParts(year, match[1], match[2]);
+        return `${padDatePart(value.getMonth() + 1)}/${padDatePart(value.getDate())}/${value.getFullYear()}`;
     }
 
-    match = input.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
-    if (match) {
-        return formatParts(match[1], match[2], match[3]);
-    }
-
-    if (/^\d+(\.\d+)?$/.test(input)) {
-        const serial = Number(input);
-        if (serial > 0 && serial <= MAX_EXCEL_SERIAL_DATE) {
-            // Excel incorrectly includes a non-existent 1900-02-29 date at serial 60; adjust serials after that point.
-            const adjustedSerial = serial >= 60 ? serial - 1 : serial;
-            const date = new Date((adjustedSerial - EXCEL_TO_UNIX_DAYS_OFFSET) * 86400000);
-            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(date.getUTCDate()).padStart(2, '0');
-            return `${month}/${day}/${date.getUTCFullYear()}`;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const excelDate = new Date(excelEpoch.getTime() + (value * 86400000));
+        if (!Number.isNaN(excelDate.getTime())) {
+            return formatDateMMDDYYYY(excelDate);
         }
     }
 
-    const parsed = new Date(input);
-    if (Number.isNaN(parsed.getTime())) return '';
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    return `${month}/${day}/${parsed.getFullYear()}`;
-}
-
-function formatDateMMDDYY(value) {
-    const formatted = formatDateMMDDYYYY(value);
-    if (!formatted) return value === null || value === undefined ? '' : String(value).trim();
-    const match = formatted.match(/^(\d{2}\/\d{2})\/(\d{4})$/);
-    if (!match) return formatted;
-    return `${match[1]}/${match[2].slice(-2)}`;
-}
-
-function formatDescPuDateValue(value) {
-    if (value === null || value === undefined) return '';
-    if (value instanceof Date && !Number.isNaN(value.getTime())) return formatDateMMDDYY(value);
-
-    const rawInput = String(value);
-    const input = rawInput.trim();
-    if (!input) return '';
-
-    // Matches YYYY-MM-DD, YYYY/MM/DD, MM-DD-YY, MM/DD/YY, MM-DD-YYYY, and MM/DD/YYYY tokens inside mixed text.
-    const datePattern = /\b(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g;
-    const SEPARATOR_TRIM_PATTERN = /^[\s/|,;]+|[\s/|,;]+$/g;
-    const segments = [];
-    let lastIndex = 0;
-    let hasDateToken = false;
-
-    const addTextSegment = (text) => {
-        if (!text) return;
-        const cleaned = text.replace(SEPARATOR_TRIM_PATTERN, '').trim();
-        if (cleaned) segments.push(cleaned);
-    };
-
-    for (const match of input.matchAll(datePattern)) {
-        hasDateToken = true;
-        addTextSegment(input.slice(lastIndex, match.index));
-        const formattedDate = formatDateMMDDYY(match[0]);
-        if (formattedDate) {
-            segments.push(formattedDate);
-        } else {
-            addTextSegment(match[0]);
-        }
-        lastIndex = match.index + match[0].length;
+    const trimmedValue = String(value).trim();
+    if (!trimmedValue) {
+        return '';
     }
 
-    addTextSegment(input.slice(lastIndex));
+    const isoMatch = trimmedValue.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+    if (isoMatch) {
+        return `${padDatePart(isoMatch[2])}/${padDatePart(isoMatch[3])}/${isoMatch[1]}`;
+    }
 
-    if (hasDateToken && segments.length > 0) return segments.join(' / ');
+    const slashMatch = trimmedValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:,?\s.*)?$/);
+    if (slashMatch) {
+        let month = parseInt(slashMatch[1], 10);
+        let day = parseInt(slashMatch[2], 10);
+        let year = slashMatch[3];
+        if (year.length === 2) {
+            year = `20${year}`;
+        }
 
-    return formatDateMMDDYY(input);
+        // If the first token cannot be a month, treat as DD/MM/YYYY and swap.
+        if (month > 12 && day <= 12) {
+            const tmp = month;
+            month = day;
+            day = tmp;
+        }
+        return `${padDatePart(month)}/${padDatePart(day)}/${year}`;
+    }
+
+    const parsedDate = new Date(trimmedValue);
+    if (!Number.isNaN(parsedDate.getTime())) {
+        return `${padDatePart(parsedDate.getMonth() + 1)}/${padDatePart(parsedDate.getDate())}/${parsedDate.getFullYear()}`;
+    }
+
+    return trimmedValue;
 }
 
-// Ensure products have new fields
-products = products.map(p => ({
-    sku: p.sku,
-    name: p.name,
-    cost: p.cost || 0,
-    price: p.price,
-    quantity: p.quantity,
-    location: p.location || '',
-    hyperlink: p.hyperlink || '',
-    notes: p.notes || [],
-    purchaseName: p.purchaseName || '',
-    purchaseSource: p.purchaseSource || '',
-    // Added fields for spreadsheet mapping
-    condition: p.condition || '',
-    descPuDate: p.descPuDate || '',
-    asin: p.asin || '',
-    listDate: p.listDate || '',
-    soldDate: p.soldDate || '',
-    retail: p.retail || '',
-    soldFor: p.soldFor || '',
-    profit: p.profit !== undefined ? p.profit : '',
-    totalPrice: p.totalPrice !== undefined ? p.totalPrice : (p.price && p.quantity ? (p.price * p.quantity) : ''),
-}));
+function normalizeUrl(value) {
+    const trimmedValue = normalizeText(value);
+    if (!trimmedValue || /\s/.test(trimmedValue)) {
+        return '';
+    }
+    if (/^https?:\/\//i.test(trimmedValue)) {
+        return trimmedValue;
+    }
+    if (/^[^\s]+\.[^\s]+/.test(trimmedValue)) {
+        return `https://${trimmedValue}`;
+    }
+    return '';
+}
+
+function renderLinkedCell(value) {
+    const text = normalizeText(value);
+    if (!text) {
+        return '';
+    }
+    const url = normalizeUrl(text);
+    if (!url) {
+        return text;
+    }
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+}
+
+function calculateInventoryProfit(product) {
+    const quantity = parseIntegerOrBlank(product.quantity);
+    const soldFor = parseNumberOrBlank(product.soldFor);
+    const totalPrice = parseNumberOrBlank(product.totalPrice);
+    if (soldFor !== '' && totalPrice !== '') {
+        const normalizedQuantity = quantity === '' || quantity === 0 ? 1 : quantity;
+        return (soldFor * normalizedQuantity) - totalPrice;
+    }
+    const fallbackProfit = parseNumberOrBlank(product.profit);
+    return fallbackProfit === '' ? '' : fallbackProfit;
+}
+
+function applySaleToInventoryRow(product, soldUnitPrice) {
+    product.soldDate = formatDateMMDDYYYY(new Date());
+    product.soldFor = soldUnitPrice;
+    const recalculatedProfit = calculateInventoryProfit(product);
+    product.profit = recalculatedProfit === '' ? '' : Number(recalculatedProfit).toFixed(2);
+}
+
+function normalizeNotes(notes) {
+    if (!Array.isArray(notes)) {
+        return [];
+    }
+    return notes
+        .map(note => {
+            if (typeof note === 'string') {
+                return {type: 'Product', text: note.trim()};
+            }
+            return {
+                type: note && note.type ? String(note.type) : 'Product',
+                text: note && note.text ? String(note.text).trim() : ''
+            };
+        })
+        .filter(note => note.text);
+}
+
+function normalizeProduct(product = {}) {
+    const normalizedPrice = parseNumberOrBlank(product.price);
+    const normalizedQuantity = parseIntegerOrBlank(product.quantity);
+    const normalizedTotalPrice = parseNumberOrBlank(product.totalPrice);
+    return {
+        sku: normalizeText(product.sku),
+        condition: normalizeText(product.condition),
+        desc: normalizeText(product.desc !== undefined ? product.desc : product.descPuDate),
+        brand: normalizeText(product.brand),
+        asin: normalizeText(product.asin),
+        name: normalizeText(product.name),
+        seller: normalizeText(product.seller),
+        quantity: normalizedQuantity === '' ? 0 : normalizedQuantity,
+        price: normalizedPrice === '' ? 0 : normalizedPrice,
+        totalPrice: normalizedTotalPrice !== '' ? normalizedTotalPrice : ((normalizedPrice !== '' && normalizedQuantity !== '') ? normalizedPrice * normalizedQuantity : ''),
+        skuDisplay: normalizeText(product.skuDisplay),
+        location: normalizeText(product.location),
+        receivedDate: normalizeText(product.receivedDate),
+        listDate: normalizeText(product.listDate),
+        soldDate: normalizeText(product.soldDate),
+        retail: parseNumberOrBlank(product.retail),
+        soldFor: parseNumberOrBlank(product.soldFor),
+        profit: parseNumberOrBlank(product.profit),
+        notes: normalizeNotes(product.notes),
+        hyperlink: normalizeText(product.hyperlink),
+        orderNumber: normalizeText(product.orderNumber),
+        cost: parseNumberOrBlank(product.cost) === '' ? 0 : parseNumberOrBlank(product.cost),
+        purchaseName: normalizeText(product.purchaseName),
+        purchaseSource: normalizeText(product.purchaseSource)
+    };
+}
+
+function mergeProductData(existingProduct, importedProduct, importedFields) {
+    const mergedProduct = normalizeProduct(existingProduct);
+    importedFields.forEach(field => {
+        if (field === 'notes') {
+            const existingNotes = normalizeNotes(mergedProduct.notes);
+            const incomingNotes = normalizeNotes(importedProduct.notes);
+            const seenNotes = new Set(existingNotes.map(note => `${note.type}|${note.text}`));
+            incomingNotes.forEach(note => {
+                const noteKey = `${note.type}|${note.text}`;
+                if (!seenNotes.has(noteKey)) {
+                    existingNotes.push(note);
+                    seenNotes.add(noteKey);
+                }
+            });
+            mergedProduct.notes = existingNotes;
+            return;
+        }
+
+        const nextValue = importedProduct[field];
+        if (nextValue === undefined || nextValue === null || nextValue === '') {
+            return;
+        }
+        mergedProduct[field] = nextValue;
+    });
+
+    return normalizeProduct(mergedProduct);
+}
+
+function getSpreadsheetColumnMap(headers) {
+    const colMap = {};
+    headers.forEach((header, index) => {
+        const normalizedHeader = normalizeText(header).toLowerCase();
+        if (!normalizedHeader) {
+            return;
+        }
+        Object.keys(SPREADSHEET_FIELD_ALIASES).forEach(field => {
+            if (!colMap[field] && SPREADSHEET_FIELD_ALIASES[field].includes(normalizedHeader)) {
+                colMap[field] = index;
+            }
+        });
+    });
+    return colMap;
+}
+
+function getWorksheetCellValue(worksheet, rowIndex, columnIndex) {
+    if (columnIndex === undefined) {
+        return '';
+    }
+    const cellAddr = XLSX.utils.encode_cell({r: rowIndex, c: columnIndex});
+    const cell = worksheet[cellAddr];
+    if (!cell) {
+        return '';
+    }
+    if (cell.l) {
+        return cell.l.Target || cell.l || '';
+    }
+    if (cell.w !== undefined && cell.w !== null && cell.w !== '') {
+        return cell.w;
+    }
+    return cell.v === undefined || cell.v === null ? '' : cell.v;
+}
+
+// Ensure products use the canonical spreadsheet_1 field model
+products = products.map(normalizeProduct);
 
 // Ensure sales have pickedUp and profit
 sales = sales.map(s => ({
     ...s,
+    date: formatDateMMDDYYYY(s.date),
     pickedUp: s.pickedUp || false,
     profit: s.profit !== undefined ? s.profit : ((s.price - (products.find(p => p.sku === s.sku)?.cost || 0)) * s.quantity)
 }));
@@ -209,100 +338,22 @@ sales = sales.map(s => ({
 let filteredSales = sales;
 let isSortedByLocation = false;
 let filteredProducts = products;
+let inventoryKeywordTerm = '';
+let inventoryLocationTerm = '';
+let inventoryFieldFilter = '';
+let inventoryFieldTerm = '';
+let inventorySortField = '';
+let inventorySortDirection = 'asc';
 let inventoryPage = 1;
 const ITEMS_PER_PAGE = 100;
-const hyperlinkContentCache = new Map();
-const hyperlinkFetchPromises = new Map();
-let inventoryKeywordSearchTerm = '';
-let inventoryKeywordSearchSessionId = 0;
-let inventoryRemoteMatchKeys = new Set();
-const HYPERLINK_CONTENT_CACHE_LIMIT = 200;
-const PROXY_FETCH_ENDPOINT = '/proxy/fetch';
-const searchUtils = window.InventorySearchUtils || {
-    isValidUrl: (value) => {
-        try {
-            const parsed = new URL(value);
-            return /^https?:$/i.test(parsed.protocol);
-        } catch (error) {
-            return false;
-        }
-    },
-    stripHtmlTags: (html) => typeof html === 'string' ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '',
-    getSessionCache: () => null,
-    setSessionCache: () => {}
+const INVENTORY_FILTER_FIELD_OPTIONS = {
+    brand: 'Brand',
+    seller: 'Seller',
+    receivedDate: "Rec'd",
+    listDate: 'List Date',
+    soldDate: 'Sold Date',
+    orderNumber: 'Order #'
 };
-
-function setCachedHyperlinkContent(url, content) {
-    if (hyperlinkContentCache.has(url)) {
-        hyperlinkContentCache.delete(url);
-    }
-    if (hyperlinkContentCache.size >= HYPERLINK_CONTENT_CACHE_LIMIT) {
-        const oldestKey = hyperlinkContentCache.keys().next().value;
-        if (oldestKey) hyperlinkContentCache.delete(oldestKey);
-    }
-    hyperlinkContentCache.set(url, content);
-}
-
-function getValidHyperlinkUrl(value) {
-    if (typeof value !== 'string') return null;
-    let url = value.trim();
-    if (!url) return null;
-    if (!/^https?:\/\//i.test(url)) {
-        url = 'https://' + url;
-    }
-    if (/\s/.test(url)) return null;
-    if (!searchUtils.isValidUrl(url)) return null;
-    return new URL(url).href;
-}
-
-function getProxyFetchUrl(url) {
-    return `${PROXY_FETCH_ENDPOINT}?url=${encodeURIComponent(url)}`;
-}
-
-function getProductMatchKey(product) {
-    return product ? (product.sku || product.name || '') : '';
-}
-
-function fetchHyperlinkContent(url) {
-    if (hyperlinkContentCache.has(url)) {
-        return Promise.resolve(hyperlinkContentCache.get(url));
-    }
-    const cachedSessionContent = searchUtils.getSessionCache(url);
-    if (typeof cachedSessionContent === 'string') {
-        setCachedHyperlinkContent(url, cachedSessionContent);
-        return Promise.resolve(cachedSessionContent);
-    }
-    if (hyperlinkFetchPromises.has(url)) {
-        return hyperlinkFetchPromises.get(url);
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const request = fetch(getProxyFetchUrl(url), { signal: controller.signal })
-        .then(response => {
-            if (!response.ok) throw new Error('Failed to fetch URL');
-            return response.text();
-        })
-        .then(text => {
-            const visibleText = searchUtils.stripHtmlTags(text).toLowerCase();
-            setCachedHyperlinkContent(url, visibleText);
-            searchUtils.setSessionCache(url, visibleText);
-            return visibleText;
-        })
-        .catch(() => {
-            setCachedHyperlinkContent(url, '');
-            searchUtils.setSessionCache(url, '');
-            return '';
-        })
-        .finally(() => {
-            clearTimeout(timeoutId);
-            hyperlinkFetchPromises.delete(url);
-        });
-
-    hyperlinkFetchPromises.set(url, request);
-    return request;
-}
 // Patch: Expose pagination functions globally so HTML buttons work
 window.nextInventoryPage = function() {
     inventoryPage++;
@@ -343,6 +394,72 @@ function saveData() {
     }
 }
 
+function matchesInventoryKeyword(product, term) {
+    return Object.keys(product).some(key => {
+        const value = product[key];
+        if (typeof value === 'string') {
+            return value.toLowerCase().includes(term);
+        }
+        if (typeof value === 'number') {
+            return String(value).toLowerCase().includes(term);
+        }
+        if (Array.isArray(value)) {
+            return value.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
+        }
+        return false;
+    });
+}
+
+function getInventoryFieldPlaceholder() {
+    if (inventoryFieldFilter && INVENTORY_FILTER_FIELD_OPTIONS[inventoryFieldFilter]) {
+        return `Filter by ${INVENTORY_FILTER_FIELD_OPTIONS[inventoryFieldFilter]}`;
+    }
+    return "Choose Brand, Seller, Rec'd, List Date, Sold Date, or Order #";
+}
+
+function getSortableHeaderLabel(label, field) {
+    if (inventorySortField !== field) {
+        return label;
+    }
+    return `${label} ${inventorySortDirection === 'asc' ? '▲' : '▼'}`;
+}
+
+function compareInventoryValues(leftValue, rightValue) {
+    const leftNumber = parseFloat(leftValue);
+    const rightNumber = parseFloat(rightValue);
+    if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)) {
+        return leftNumber - rightNumber;
+    }
+    return String(leftValue).localeCompare(String(rightValue), undefined, {numeric: true, sensitivity: 'base'});
+}
+
+function applyInventoryFiltersAndSorting() {
+    let nextProducts = [...products];
+
+    if (inventoryKeywordTerm) {
+        nextProducts = nextProducts.filter(product => matchesInventoryKeyword(product, inventoryKeywordTerm));
+    }
+
+    if (inventoryLocationTerm) {
+        nextProducts = nextProducts.filter(product => (product.location || '').toLowerCase().includes(inventoryLocationTerm));
+    }
+
+    if (inventoryFieldFilter && inventoryFieldTerm) {
+        nextProducts = nextProducts.filter(product => normalizeText(product[inventoryFieldFilter]).toLowerCase().includes(inventoryFieldTerm));
+    }
+
+    if (inventorySortField) {
+        nextProducts.sort((a, b) => {
+            const comparison = compareInventoryValues(normalizeText(a[inventorySortField]), normalizeText(b[inventorySortField]));
+            return inventorySortDirection === 'asc' ? comparison : comparison * -1;
+        });
+    } else if (isSortedByLocation) {
+        nextProducts.sort((a, b) => (a.location || '').toLowerCase().localeCompare((b.location || '').toLowerCase()));
+    }
+
+    filteredProducts = nextProducts;
+}
+
 function showUploadForm() {
     mainContent.innerHTML = `
         <h2>Upload Spreadsheet</h2>
@@ -351,7 +468,7 @@ function showUploadForm() {
             <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required style="font-size:1.1rem;padding:0.5rem;width:100%;max-width:350px;" />
             <button type="submit" style="margin-top:1rem;">Upload and Import</button>
         </form>
-        <div id="iosHint" style="margin-top:1rem;color:#555;font-size:0.95rem;">If you have trouble selecting a file on iPhone/iPad, make sure the file is saved in your Files app (not iCloud Drive only), then try again. Safari and Chrome on iOS are supported.</div>
+        <div id="iosHint" style="margin-top:1rem;color:#555;font-size:0.95rem;">Uploads merge into the current Inventory view by SKU. Existing items stay in place, matching SKUs are updated from the spreadsheet, and new SKUs are appended. If you have trouble selecting a file on iPhone/iPad, make sure the file is saved in your Files app, then try again.</div>
     `;
     // Always open file picker, never camera
     const fileInput = document.getElementById('fileInput');
@@ -382,119 +499,82 @@ function uploadSpreadsheet(e) {
         try {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
-            const sheetNames = workbook.SheetNames;
-            const productsBySku = new Map(
-                products.map(product => [String(product.sku || '').trim(), product]).filter(([sku]) => sku)
-            );
-            sheetNames.forEach(sheetName => {
-                const worksheet = workbook.Sheets[sheetName];
-                if (!worksheet || !worksheet['!ref']) return;
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                const maxRow = range.e.r;
-                const maxCol = range.e.c;
-                // Get headers from row 0
-                const headers = [];
-                for (let c = 0; c <= maxCol; c++) {
-                    const cellAddr = XLSX.utils.encode_cell({r: 0, c});
-                    const cell = worksheet[cellAddr];
-                    headers.push(cell ? String(cell.v || '') : '');
+            const sheetName = workbook.SheetNames.includes(CANONICAL_SHEET_NAME) ? CANONICAL_SHEET_NAME : workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            if (!worksheet || !worksheet['!ref']) {
+                throw new Error('The selected workbook does not contain a readable inventory sheet.');
+            }
+
+            const range = XLSX.utils.decode_range(worksheet['!ref']);
+            const maxRow = range.e.r;
+            const maxCol = range.e.c;
+            const headers = [];
+            for (let c = 0; c <= maxCol; c++) {
+                headers.push(getWorksheetCellValue(worksheet, 0, c));
+            }
+            const colMap = getSpreadsheetColumnMap(headers);
+            if (colMap.sku === undefined) {
+                throw new Error(`The workbook must contain the SKU column from ${CANONICAL_SPREADSHEET_NAME}.`);
+            }
+
+            let addedCount = 0;
+            let updatedCount = 0;
+            for (let r = 1; r <= maxRow; r++) {
+                const sku = normalizeText(getWorksheetCellValue(worksheet, r, colMap.sku));
+                if (!sku) {
+                    continue;
                 }
-                // Map columns (full mapping for all headers)
-                const colMap = {};
-                headers.forEach((header, index) => {
-                    if (header) {
-                        const h = header.toLowerCase().trim();
-                        if (h.includes('condition')) colMap.condition = index;
-                        else if (h.includes('desc') || h.includes('pu date')) colMap.descPuDate = index;
-                        else if (h.includes('asin')) colMap.asin = index;
-                        else if (h.includes('item title') || h.includes('name') || h.includes('title')) colMap.name = index;
-                        else if (h === 'qty' || h.includes('quantity')) colMap.quantity = index;
-                        else if (h === 'cost' || h.includes('item cost') || h.includes('unit cost')) colMap.cost = index;
-                        else if (h.includes('item price')) colMap.price = index;
-                        else if (h.includes('total price')) colMap.totalPrice = index;
-                        else if (h === 'sku') colMap.sku = index;
-                        else if (h === 'loc' || h.includes('location')) colMap.location = index;
-                        else if (h.includes('list date')) colMap.listDate = index;
-                        else if (h.includes('sold date')) colMap.soldDate = index;
-                        else if (h.includes('retail')) colMap.retail = index;
-                        else if (h.includes('sold for')) colMap.soldFor = index;
-                        else if (h.includes('profit')) colMap.profit = index;
-                        else if (h.includes('notes')) colMap.notes = index;
-                        else if (h === 'link' || h.includes('hyperlink')) colMap.hyperlink = index;
+
+                const importedFields = ['sku'];
+                const importedProduct = {
+                    sku,
+                    condition: normalizeText(getWorksheetCellValue(worksheet, r, colMap.condition)),
+                    desc: normalizeText(getWorksheetCellValue(worksheet, r, colMap.desc)),
+                    brand: normalizeText(getWorksheetCellValue(worksheet, r, colMap.brand)),
+                    asin: normalizeText(getWorksheetCellValue(worksheet, r, colMap.asin)),
+                    name: normalizeText(getWorksheetCellValue(worksheet, r, colMap.name)),
+                    seller: normalizeText(getWorksheetCellValue(worksheet, r, colMap.seller)),
+                    quantity: parseIntegerOrBlank(getWorksheetCellValue(worksheet, r, colMap.quantity)),
+                    price: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.price)),
+                    totalPrice: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.totalPrice)),
+                    location: normalizeText(getWorksheetCellValue(worksheet, r, colMap.location)),
+                    receivedDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.receivedDate)),
+                    listDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.listDate)),
+                    soldDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.soldDate)),
+                    retail: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.retail)),
+                    soldFor: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.soldFor)),
+                    profit: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.profit)),
+                    hyperlink: normalizeText(getWorksheetCellValue(worksheet, r, colMap.hyperlink)),
+                    orderNumber: normalizeText(getWorksheetCellValue(worksheet, r, colMap.orderNumber)),
+                    notes: []
+                };
+
+                Object.keys(colMap).forEach(field => {
+                    if (field === 'notes' || field === 'sku') {
+                        return;
+                    }
+                    const rawValue = getWorksheetCellValue(worksheet, r, colMap[field]);
+                    if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+                        importedFields.push(field);
                     }
                 });
-                // Data from row 1 onwards
-                for (let r = 1; r <= maxRow; r++) {
-                    const rowData = {};
-                    for (let c = 0; c <= maxCol; c++) {
-                        const cellAddr = XLSX.utils.encode_cell({r, c});
-                        const cell = worksheet[cellAddr];
-                        let value = cell ? String(cell.v || '') : '';
-                        // If hyperlink, get the URL
-                        if (cell && cell.l) {
-                            value = cell.l.Target || cell.l || value;
-                        }
-                        rowData[c] = value;
-                    }
-                    const sku = String(rowData[colMap.sku] || '').trim();
-                    if (!sku) continue; // Skip rows without SKU
-                    const existing = productsBySku.get(sku);
-                    const productData = { sku };
-                    if (colMap.name !== undefined) productData.name = rowData[colMap.name];
-                    if (colMap.cost !== undefined) productData.cost = parseFloat(rowData[colMap.cost]) || 0;
-                    if (colMap.price !== undefined) productData.price = parseFloat(rowData[colMap.price]) || 0;
-                    if (colMap.quantity !== undefined) productData.quantity = parseInt(rowData[colMap.quantity], 10) || 0;
-                    if (colMap.location !== undefined) productData.location = rowData[colMap.location];
-                    if (colMap.hyperlink !== undefined) productData.hyperlink = rowData[colMap.hyperlink];
-                    if (colMap.condition !== undefined) productData.condition = rowData[colMap.condition];
-                    if (colMap.descPuDate !== undefined) productData.descPuDate = rowData[colMap.descPuDate];
-                    if (colMap.asin !== undefined) productData.asin = rowData[colMap.asin];
-                    if (colMap.listDate !== undefined) productData.listDate = rowData[colMap.listDate];
-                    if (colMap.soldDate !== undefined) productData.soldDate = rowData[colMap.soldDate];
-                    if (colMap.retail !== undefined) productData.retail = rowData[colMap.retail];
-                    if (colMap.soldFor !== undefined) productData.soldFor = rowData[colMap.soldFor];
-                    if (colMap.profit !== undefined) productData.profit = rowData[colMap.profit];
-                    if (colMap.totalPrice !== undefined) productData.totalPrice = rowData[colMap.totalPrice];
-                    if (colMap.notes !== undefined) {
-                        const noteText = rowData[colMap.notes];
-                        if (noteText) {
-                            productData.notes = [{type: 'Product', text: noteText}];
-                            // If the note looks like a name (letters and spaces, no @ or http), set as purchaser name
-                            if (!productData.purchaseName && /^[A-Za-z .,'-]+$/.test(noteText.trim()) && !noteText.includes('@') && !noteText.toLowerCase().includes('http')) {
-                                productData.purchaseName = noteText.trim();
-                            }
-                        }
-                    }
-                    if (existing) {
-                        Object.assign(existing, productData);
-                    } else {
-                        const newProduct = {
-                            sku,
-                            name: '',
-                            cost: 0,
-                            price: 0,
-                            quantity: 0,
-                            location: '',
-                            hyperlink: '',
-                            notes: [],
-                            purchaseName: '',
-                            purchaseSource: '',
-                            condition: '',
-                            descPuDate: '',
-                            asin: '',
-                            listDate: '',
-                            soldDate: '',
-                            retail: '',
-                            soldFor: '',
-                            profit: '',
-                            totalPrice: '',
-                            ...productData
-                        };
-                        products.push(newProduct);
-                        productsBySku.set(sku, newProduct);
-                    }
+
+                const noteText = normalizeText(getWorksheetCellValue(worksheet, r, colMap.notes));
+                if (noteText) {
+                    importedProduct.notes = [{type: 'Product', text: noteText}];
+                    importedFields.push('notes');
                 }
-            });
+
+                const existingIndex = products.findIndex(product => product.sku === sku);
+                if (existingIndex >= 0) {
+                    products[existingIndex] = mergeProductData(products[existingIndex], importedProduct, importedFields);
+                    updatedCount++;
+                } else {
+                    products.push(normalizeProduct(importedProduct));
+                    addedCount++;
+                }
+            }
+
             saveData();
             showInventory();
         } catch (error) {
@@ -510,18 +590,26 @@ function showAddProductForm() {
         <form id="addProductForm">
             <label for="sku">SKU:</label>
             <input type="text" id="sku" required>
-            <label for="name">Product Name:</label>
+            <label for="name">Item Title:</label>
             <input type="text" id="name" required>
+            <label for="brand">Brand:</label>
+            <input type="text" id="brand">
+            <label for="seller">Seller:</label>
+            <input type="text" id="seller">
             <label for="cost">Cost:</label>
             <input type="number" id="cost" step="0.01" required>
-            <label for="price">Selling Price:</label>
+            <label for="price">Item Price:</label>
             <input type="number" id="price" step="0.01" required>
-            <label for="quantity">Quantity:</label>
+            <label for="quantity">Qty:</label>
             <input type="number" id="quantity" required>
-            <label for="location">Location:</label>
+            <label for="location">Loc:</label>
             <input type="text" id="location">
-            <label for="hyperlink">Hyperlink:</label>
+            <label for="receivedDate">Rec'd:</label>
+            <input type="text" id="receivedDate">
+            <label for="hyperlink">Link:</label>
             <input type="url" id="hyperlink">
+            <label for="orderNumber">Order #:</label>
+            <input type="text" id="orderNumber">
             <label for="purchaseName">Purchase Name:</label>
             <input type="text" id="purchaseName">
             <label for="purchaseSource">Source of Purchase:</label>
@@ -539,11 +627,15 @@ function addProduct(e) {
     e.preventDefault();
     const sku = document.getElementById('sku').value;
     const name = document.getElementById('name').value;
+    const brand = document.getElementById('brand').value;
+    const seller = document.getElementById('seller').value;
     const cost = parseFloat(document.getElementById('cost').value);
     const price = parseFloat(document.getElementById('price').value);
     const quantity = parseInt(document.getElementById('quantity').value);
     const location = document.getElementById('location').value;
+    const receivedDate = document.getElementById('receivedDate').value;
     const hyperlink = document.getElementById('hyperlink').value;
+    const orderNumber = document.getElementById('orderNumber').value;
     const purchaseName = document.getElementById('purchaseName').value;
     const purchaseSource = document.getElementById('purchaseSource').value;
     const notesText = document.getElementById('notes').value;
@@ -553,7 +645,7 @@ function addProduct(e) {
         return;
     }
     const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-    products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+    products.push(normalizeProduct({ sku, name, brand, seller, cost, price, quantity, location, receivedDate, hyperlink, orderNumber, notes, purchaseName, purchaseSource }));
     saveData();
     alert('Product added successfully!');
     showInventory();
@@ -570,18 +662,26 @@ function editProduct(sku) {
         <form id="editProductForm">
             <label for="editSku">SKU:</label>
             <input type="text" id="editSku" value="${product.sku}" required>
-            <label for="editName">Product Name:</label>
+            <label for="editName">Item Title:</label>
             <input type="text" id="editName" value="${product.name}" required>
+            <label for="editBrand">Brand:</label>
+            <input type="text" id="editBrand" value="${product.brand || ''}">
+            <label for="editSeller">Seller:</label>
+            <input type="text" id="editSeller" value="${product.seller || ''}">
             <label for="editCost">Cost:</label>
             <input type="number" id="editCost" step="0.01" value="${product.cost}" required>
-            <label for="editPrice">Selling Price:</label>
+            <label for="editPrice">Item Price:</label>
             <input type="number" id="editPrice" step="0.01" value="${product.price}" required>
-            <label for="editQuantity">Quantity:</label>
+            <label for="editQuantity">Qty:</label>
             <input type="number" id="editQuantity" value="${product.quantity}" required>
-            <label for="editLocation">Location:</label>
+            <label for="editLocation">Loc:</label>
             <input type="text" id="editLocation" value="${product.location}">
-            <label for="editHyperlink">Hyperlink:</label>
+            <label for="editReceivedDate">Rec'd:</label>
+            <input type="text" id="editReceivedDate" value="${product.receivedDate || ''}">
+            <label for="editHyperlink">Link:</label>
             <input type="url" id="editHyperlink" value="${product.hyperlink}">
+            <label for="editOrderNumber">Order #:</label>
+            <input type="text" id="editOrderNumber" value="${product.orderNumber || ''}">
             <label for="editPurchaseName">Purchase Name:</label>
             <input type="text" id="editPurchaseName" value="${product.purchaseName || ''}">
             <label for="editPurchaseSource">Source of Purchase:</label>
@@ -600,11 +700,15 @@ function updateProduct(e, oldSku) {
     e.preventDefault();
     const newSku = document.getElementById('editSku').value;
     const name = document.getElementById('editName').value;
+    const brand = document.getElementById('editBrand').value;
+    const seller = document.getElementById('editSeller').value;
     const cost = parseFloat(document.getElementById('editCost').value);
     const price = parseFloat(document.getElementById('editPrice').value);
     const quantity = parseInt(document.getElementById('editQuantity').value);
     const location = document.getElementById('editLocation').value;
+    const receivedDate = document.getElementById('editReceivedDate').value;
     const hyperlink = document.getElementById('editHyperlink').value;
+    const orderNumber = document.getElementById('editOrderNumber').value;
     const purchaseName = document.getElementById('editPurchaseName').value;
     const purchaseSource = document.getElementById('editPurchaseSource').value;
     const notesText = document.getElementById('editNotes').value;
@@ -619,25 +723,39 @@ function updateProduct(e, oldSku) {
         const [type, ...textParts] = line.split(': ');
         return {type: type || 'Product', text: textParts.join(': ') || line};
     }).filter(note => note.text.trim());
-    products[productIndex] = { sku: newSku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource };
+    products[productIndex] = normalizeProduct({
+        ...products[productIndex],
+        sku: newSku,
+        name,
+        brand,
+        seller,
+        cost,
+        price,
+        quantity,
+        location,
+        receivedDate,
+        hyperlink,
+        orderNumber,
+        notes,
+        purchaseName,
+        purchaseSource
+    });
     saveData();
     alert('Product updated successfully!');
     showInventory();
 }
 
-function deleteProductBySku(sku) {
-    if (!sku) return;
-    const confirmed = window.confirm('Are you sure you want to delete this inventory item?');
-    if (!confirmed) return;
-
-    const productIndex = products.findIndex(p => p.sku === sku);
-    if (productIndex === -1) return;
-
-    const [deletedProduct] = products.splice(productIndex, 1);
-    filteredProducts = filteredProducts.filter(product => product.sku !== sku);
-    if (deletedProduct) {
-        inventoryRemoteMatchKeys.delete(getProductMatchKey(deletedProduct));
+function deleteProduct(sku) {
+    const productIndex = products.findIndex(product => product.sku === sku);
+    if (productIndex === -1) {
+        return;
     }
+    const product = products[productIndex];
+    const confirmDelete = window.confirm(`Delete inventory row for SKU ${product.sku}${product.name ? ` (${product.name})` : ''}?`);
+    if (!confirmDelete) {
+        return;
+    }
+    products.splice(productIndex, 1);
     saveData();
     showInventory(isSortedByLocation);
 }
@@ -748,12 +866,16 @@ function showScanForm() {
                 <span style='color:orange;'>Product not found! Add new product to inventory:</span>
                 <form id="addScannedProductForm" style="margin-top:1em;">
                     <label>SKU:<br><input type="text" id="newSku" value="${sku}" required readonly></label><br>
-                    <label>Name:<br><input type="text" id="newName" required></label><br>
+                    <label>Item Title:<br><input type="text" id="newName" required></label><br>
+                    <label>Brand:<br><input type="text" id="newBrand"></label><br>
+                    <label>Seller:<br><input type="text" id="newSeller"></label><br>
                     <label>Cost:<br><input type="number" id="newCost" step="0.01" required></label><br>
-                    <label>Price:<br><input type="number" id="newPrice" step="0.01" required></label><br>
-                    <label>Quantity:<br><input type="number" id="newQuantity" value="1" required></label><br>
-                    <label>Location:<br><input type="text" id="newLocation"></label><br>
-                    <label>Hyperlink:<br><input type="url" id="newHyperlink"></label><br>
+                    <label>Item Price:<br><input type="number" id="newPrice" step="0.01" required></label><br>
+                    <label>Qty:<br><input type="number" id="newQuantity" value="1" required></label><br>
+                    <label>Loc:<br><input type="text" id="newLocation"></label><br>
+                    <label>Rec'd:<br><input type="text" id="newReceivedDate"></label><br>
+                    <label>Link:<br><input type="url" id="newHyperlink"></label><br>
+                    <label>Order #:<br><input type="text" id="newOrderNumber"></label><br>
                     <label>Purchase Name:<br><input type="text" id="newPurchaseName"></label><br>
                     <label>Source of Purchase:<br><input type="text" id="newPurchaseSource"></label><br>
                     <label>Notes:<br><textarea id="newNotes"></textarea></label><br>
@@ -764,11 +886,15 @@ function showScanForm() {
                 e.preventDefault();
                 const sku = document.getElementById('newSku').value;
                 const name = document.getElementById('newName').value;
+                const brand = document.getElementById('newBrand').value;
+                const seller = document.getElementById('newSeller').value;
                 const cost = parseFloat(document.getElementById('newCost').value);
                 const price = parseFloat(document.getElementById('newPrice').value);
                 const quantity = parseInt(document.getElementById('newQuantity').value);
                 const location = document.getElementById('newLocation').value;
+                const receivedDate = document.getElementById('newReceivedDate').value;
                 const hyperlink = document.getElementById('newHyperlink').value;
+                const orderNumber = document.getElementById('newOrderNumber').value;
                 const purchaseName = document.getElementById('newPurchaseName').value;
                 const purchaseSource = document.getElementById('newPurchaseSource').value;
                 const notesText = document.getElementById('newNotes').value;
@@ -777,18 +903,18 @@ function showScanForm() {
                     return;
                 }
                 const notes = notesText ? [{type: 'Product', text: notesText}] : [];
-                products.push({ sku, name, cost, price, quantity, location, hyperlink, notes, purchaseName, purchaseSource });
+                products.push(normalizeProduct({ sku, name, brand, seller, cost, price, quantity, location, receivedDate, hyperlink, orderNumber, notes, purchaseName, purchaseSource }));
                 saveData();
                 scanResult.innerHTML = `<span style='color:green;'>Product added successfully!</span>`;
                 showInventory();
             };
             return;
         }
-        scanResult.innerHTML = `<b>Product:</b> ${product.name} (SKU: ${product.sku})<br>Current Quantity: ${product.quantity}<br><button id="addBtn">Add to Inventory</button> <button id="subtractBtn">Subtract from Inventory</button>`;
+        scanResult.innerHTML = `<b>Item Title:</b> ${product.name} (SKU: ${product.sku})<br>Current Qty: ${product.quantity}<br><button id="addBtn">Add to Inventory</button> <button id="subtractBtn">Subtract from Inventory</button>`;
         document.getElementById('addBtn').onclick = function() {
             product.quantity += 1;
             saveData();
-            scanResult.innerHTML = `<span style='color:green;'>Added 1. New quantity: ${product.quantity}</span>`;
+            scanResult.innerHTML = `<span style='color:green;'>Added 1. New Qty: ${product.quantity}</span>`;
             showInventory();
         };
         document.getElementById('subtractBtn').onclick = function() {
@@ -797,6 +923,7 @@ function showScanForm() {
                 return;
             }
             product.quantity -= 1;
+            applySaleToInventoryRow(product, product.price);
             // Record sale
             const saleAmount = product.price;
             revenue += saleAmount;
@@ -808,11 +935,11 @@ function showScanForm() {
                 price: product.price,
                 total: saleAmount,
                 profit: profit,
-                date: new Date().toLocaleString(),
+                date: formatDateMMDDYYYY(new Date()),
                 pickedUp: false
             });
             saveData();
-            scanResult.innerHTML = `<span style='color:orange;'>Subtracted 1 (sold). New quantity: ${product.quantity}. Sale recorded.</span>`;
+            scanResult.innerHTML = `<span style='color:orange;'>Subtracted 1 (sold). New Qty: ${product.quantity}. Sale recorded.</span>`;
             showInventory();
         };
     }
@@ -833,6 +960,7 @@ function scanSku(e) {
     
     // Deduct from inventory
     product.quantity -= 1;
+    applySaleToInventoryRow(product, product.price);
     
     // Record sale
     const saleAmount = product.price;
@@ -845,7 +973,7 @@ function scanSku(e) {
         price: product.price,
         total: saleAmount,
         profit: profit,
-        date: new Date().toLocaleString(),
+        date: formatDateMMDDYYYY(new Date()),
         pickedUp: false
     });
     
@@ -856,18 +984,31 @@ function scanSku(e) {
 
 function showInventory(sortByLocation = false) {
     try {
-        if (sortByLocation) {
-            filteredProducts.sort((a, b) => (a.location || '').toLowerCase().localeCompare((b.location || '').toLowerCase()));
-        }
+        applyInventoryFiltersAndSorting();
         
         let html = '<h2>Inventory</h2>';
-        html += `<input type="text" id="keywordSearch" placeholder="Search (min 3 letters, any field)" style="width:220px;max-width:80vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
-        html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
-        const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
-        html += `<button onclick="toggleSort()">${buttonText}</button>`;
-        if (inventoryKeywordSearchTerm) {
-            html += `<div style="margin-top:0.5rem;color:#2a5ea8;">🌐 indicates the keyword was matched in linked Item Title page content.</div>`;
-        }
+        html += `<input type="text" id="keywordSearch" value="${inventoryKeywordTerm}" placeholder="Search Item Title, Brand, Seller, Rec'd, Order #, SKU..." style="width:320px;max-width:90vw;"> <button id="keywordSearchBtn">Search</button> <button onclick="clearKeywordSearch()">Clear</button> `;
+        html += `<input type="text" id="locationSearch" value="${inventoryLocationTerm}" placeholder="Search by Loc" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
+        html += `<select id="fieldFilterSelect" onchange="updateInventoryFieldPlaceholder()" style="margin-top:0.5rem;">
+            <option value="">Filter field</option>
+            <option value="brand" ${inventoryFieldFilter === 'brand' ? 'selected' : ''}>Brand</option>
+            <option value="seller" ${inventoryFieldFilter === 'seller' ? 'selected' : ''}>Seller</option>
+            <option value="receivedDate" ${inventoryFieldFilter === 'receivedDate' ? 'selected' : ''}>Rec'd</option>
+            <option value="listDate" ${inventoryFieldFilter === 'listDate' ? 'selected' : ''}>List Date</option>
+            <option value="soldDate" ${inventoryFieldFilter === 'soldDate' ? 'selected' : ''}>Sold Date</option>
+            <option value="orderNumber" ${inventoryFieldFilter === 'orderNumber' ? 'selected' : ''}>Order #</option>
+        </select> `;
+        html += `<input type="text" id="fieldFilterValue" value="${inventoryFieldTerm}" placeholder="${getInventoryFieldPlaceholder()}" style="width:220px;max-width:70vw;"> <button onclick="filterBySelectedField()">Apply</button> <button onclick="clearFieldFilter()">Clear</button> `;
+        html += `<select id="sortFieldSelect" onchange="applySortField()" style="margin-top:0.5rem;">
+            <option value="" ${inventorySortField === '' ? 'selected' : ''}>Default sort</option>
+            <option value="location" ${inventorySortField === 'location' ? 'selected' : ''}>Sort by Loc</option>
+            <option value="brand" ${inventorySortField === 'brand' ? 'selected' : ''}>Sort by Brand</option>
+            <option value="seller" ${inventorySortField === 'seller' ? 'selected' : ''}>Sort by Seller</option>
+            <option value="receivedDate" ${inventorySortField === 'receivedDate' ? 'selected' : ''}>Sort by Rec'd</option>
+            <option value="listDate" ${inventorySortField === 'listDate' ? 'selected' : ''}>Sort by List Date</option>
+            <option value="soldDate" ${inventorySortField === 'soldDate' ? 'selected' : ''}>Sort by Sold Date</option>
+            <option value="orderNumber" ${inventorySortField === 'orderNumber' ? 'selected' : ''}>Sort by Order #</option>
+        </select>`;
         // Pagination controls
         const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
         if (inventoryPage > totalPages) inventoryPage = totalPages;
@@ -878,30 +1019,32 @@ function showInventory(sortByLocation = false) {
                 `<button onclick='nextInventoryPage()' ${inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
         }
         if (filteredProducts.length === 0) {
-            html += '<p>No products found.</p>';
+            html += '<p>No products match the search.</p>';
         } else {
             html += `
                 <table>
                     <thead>
                         <tr>
                             <th>Condition</th>
-                            <th>Desc/PU Date</th>
+                            <th>Desc</th>
+                                <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('brand')">${getSortableHeaderLabel('Brand', 'brand')}</th>
                             <th>ASIN</th>
-                            <th>Item Title</th>
+                                <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('name')">${getSortableHeaderLabel('Item Title', 'name')}</th>
+                                <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('seller')">${getSortableHeaderLabel('Seller', 'seller')}</th>
                             <th>Qty</th>
                             <th>Item Price</th>
                             <th>Total Price</th>
                             <th>SKU</th>
                             <th>Loc</th>
-                            <th>List Date</th>
-                            <th>Sold Date</th>
+                                <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('receivedDate')">${getSortableHeaderLabel("Rec'd", 'receivedDate')}</th>
+                            <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('listDate')">${getSortableHeaderLabel('List Date', 'listDate')}</th>
+                            <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('soldDate')">${getSortableHeaderLabel('Sold Date', 'soldDate')}</th>
                             <th>Retail</th>
                             <th>Sold For</th>
                             <th>Profit</th>
-                            <th>Purchaser</th>
                             <th>Notes</th>
                             <th>Link</th>
-                            <th>Search Match</th>
+                                <th style="cursor:pointer;user-select:none;" onclick="sortInventoryByField('orderNumber')">${getSortableHeaderLabel('Order #', 'orderNumber')}</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -913,82 +1056,51 @@ function showInventory(sortByLocation = false) {
                 const product = filteredProducts[i];
                 // Ensure all fields are present
                 const condition = product.condition || '';
-                const descPuDate = formatDescPuDateValue(product.descPuDate);
+                const desc = product.desc || '';
+                const brand = product.brand || '';
                 const asin = product.asin || '';
-                let name = product.name || '';
-                const isRemoteMatch = inventoryRemoteMatchKeys.has(getProductMatchKey(product));
-                // If Item Title looks like a URL, make it clickable
-                if (name) {
-                    let url = name.trim();
-                    if (!/^https?:\/\//i.test(url) && /\./.test(url) && !/\s/.test(url)) {
-                        url = 'https://' + url;
-                    }
-                    if (/^https?:\/\/.+\..+/.test(url) && !/\s/.test(url)) {
-                        name = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.name}</a>`;
-                    }
-                }
-                const parseMoneyValue = (value) => {
-                    if (value === null || value === undefined || value === '') return null;
-                    const numericValue = Number(String(value).replace(/[$,]/g, '').trim());
-                    return Number.isFinite(numericValue) ? numericValue : null;
-                };
+                const name = renderLinkedCell(product.name);
+                const seller = renderLinkedCell(product.seller);
                 const quantity = product.quantity || 0;
-                const price = parseMoneyValue(product.price);
-                const totalPrice = parseMoneyValue(product.totalPrice);
+                const price = product.price ? Number(product.price) : 0;
+                const totalPrice = product.totalPrice ? Number(product.totalPrice) : (price && quantity ? price * quantity : 0);
                 const sku = product.sku || '';
-                const encodedSku = encodeURIComponent(sku);
                 const location = product.location || '';
-                const listDate = formatDateMMDDYYYY(product.listDate);
-                const soldDate = formatDateMMDDYYYY(product.soldDate);
-                const retail = parseMoneyValue(product.retail);
-                const soldFor = parseMoneyValue(product.soldFor);
-                // Calculate profit as (soldFor - totalPrice) * quantity
-                let profit = '';
-                if (soldFor !== null && totalPrice !== null) {
-                    profit = ((soldFor - totalPrice) * quantity).toFixed(2);
-                }
-                // Purchaser: use purchaseName, or extract from notes if missing
-                let purchaser = product.purchaseName || '';
+                const receivedDate = normalizeText(product.receivedDate);
+                const listDate = normalizeText(product.listDate);
+                const soldDate = normalizeText(product.soldDate);
+                const retail = product.retail ? Number(product.retail) : 0;
+                const soldFor = product.soldFor ? Number(product.soldFor) : 0;
+                const orderNumber = product.orderNumber || '';
+                const calculatedProfit = calculateInventoryProfit(product);
+                const profit = calculatedProfit === '' ? '' : Number(calculatedProfit).toFixed(2);
                 const notesArr = product.notes && Array.isArray(product.notes) ? product.notes.map(note => note.text) : [];
-                if (!purchaser && notesArr.length > 0) {
-                    const nameCandidate = notesArr.find(n => /^[A-Za-z .,'-]+$/.test(n.trim()) && !n.includes('@') && !n.toLowerCase().includes('http'));
-                    if (nameCandidate) purchaser = nameCandidate.trim();
-                }
-                const notes = notesArr.filter(n => n !== purchaser).join('; ');
-                // Hyperlink: always clickable if present, always prepends https:// if missing
-                let hyperlink = '';
-                if (product.hyperlink) {
-                    let url = product.hyperlink.trim();
-                    if (!/^https?:\/\//i.test(url)) {
-                        url = 'https://' + url;
-                    }
-                    // Only render if it looks like a valid URL (contains a dot and no spaces)
-                    if (/^https?:\/\/.+\..+/.test(url) && !/\s/.test(url)) {
-                        hyperlink = `<a href="${url}" target="_blank" rel="noopener noreferrer">${product.hyperlink}</a>`;
-                    }
-                }
+                const notes = notesArr.join('; ');
+                const hyperlink = renderLinkedCell(product.hyperlink);
                 const escapedSku = (sku).replace(/'/g, "\\'");
                 html += `
                     <tr>
                         <td>${condition}</td>
-                        <td>${descPuDate}</td>
+                        <td>${desc}</td>
+                        <td>${brand}</td>
                         <td>${asin}</td>
-                        <td>${name}${isRemoteMatch ? ` <span title="Matched in linked page content" style="color:#2a5ea8;font-weight:700;">🌐</span>` : ''}</td>
+                        <td>${name}</td>
+                        <td>${seller}</td>
                         <td>${quantity}</td>
-                        <td>$${price !== null ? price.toFixed(2) : ''}</td>
-                        <td>$${totalPrice !== null ? totalPrice.toFixed(2) : ''}</td>
+                        <td>$${price ? price.toFixed(2) : ''}</td>
+                        <td>$${totalPrice ? totalPrice.toFixed(2) : ''}</td>
                         <td>${sku}</td>
                         <td>${location}</td>
+                        <td>${receivedDate}</td>
                         <td>${listDate}</td>
                         <td>${soldDate}</td>
-                        <td>$${retail !== null ? retail.toFixed(2) : ''}</td>
-                        <td>$${soldFor !== null ? soldFor.toFixed(2) : ''}</td>
-                        <td>${profit !== '' ? `$${profit}` : ''}</td>
-                        <td>${purchaser}</td>
+                        <td>$${retail ? retail.toFixed(2) : ''}</td>
+                        <td>$${soldFor ? soldFor.toFixed(2) : ''}</td>
+                        <td>$${profit}</td>
                         <td>${notes}</td>
                         <td>${hyperlink}</td>
-                        <td>${isRemoteMatch ? 'indicates the keyword was matched in linked Item Title page content.' : ''}</td>
-                        <td><button onclick="editProduct('${escapedSku}')">Edit</button> <button type="button" class="delete-product-btn" data-sku="${encodedSku}">Delete</button></td>
+                        <td>${orderNumber}</td>
+                        <td><button onclick="editProduct('${escapedSku}')">Edit</button> <button onclick="deleteProduct('${escapedSku}')">Delete</button></td>
                     </tr>
                 `;
             }
@@ -999,101 +1111,21 @@ function showInventory(sortByLocation = false) {
         setTimeout(() => {
             const kwInput = document.getElementById('keywordSearch');
             const kwBtn = document.getElementById('keywordSearchBtn');
+            const locationInput = document.getElementById('locationSearch');
+            const fieldInput = document.getElementById('fieldFilterValue');
             if (kwInput) {
                 kwInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByKeyword(); });
             }
             if (kwBtn) {
                 kwBtn.onclick = filterByKeyword;
             }
-            document.querySelectorAll('.delete-product-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    const sku = decodeURIComponent(this.getAttribute('data-sku') || '');
-                    deleteProductBySku(sku);
-                });
-            });
+            if (locationInput) {
+                locationInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterByLocation(); });
+            }
+            if (fieldInput) {
+                fieldInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') filterBySelectedField(); });
+            }
         }, 0);
-    // Advanced search by any field, min 3 letters + hyperlink content fallback
-    let queuedAsyncRefresh = false;
-
-    function applyKeywordSearch(term, searchSessionId, allowHyperlinkFetches = true, resetPage = false) {
-        if (searchSessionId !== inventoryKeywordSearchSessionId || inventoryKeywordSearchTerm !== term) return;
-        const pendingUrls = new Set();
-        const remoteMatchKeys = new Set();
-        const matchedProducts = products.filter(product => {
-            const localMatch = Object.keys(product).some(key => {
-                const val = product[key];
-                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
-                if (Array.isArray(val)) {
-                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
-                }
-                return false;
-            });
-            if (localMatch) return true;
-
-            const url = getValidHyperlinkUrl(product.hyperlink);
-            if (!url) return false;
-
-            if (hyperlinkContentCache.has(url)) {
-                const isRemoteMatch = hyperlinkContentCache.get(url).includes(term);
-                if (isRemoteMatch) {
-                    remoteMatchKeys.add(getProductMatchKey(product));
-                }
-                return isRemoteMatch;
-            }
-
-            if (allowHyperlinkFetches) {
-                pendingUrls.add(url);
-            }
-            return false;
-        });
-
-        filteredProducts = matchedProducts;
-        inventoryRemoteMatchKeys = remoteMatchKeys;
-        if (resetPage) inventoryPage = 1;
-        showInventory(isSortedByLocation);
-
-        if (!allowHyperlinkFetches || pendingUrls.size === 0) return;
-
-        pendingUrls.forEach(url => {
-            fetchHyperlinkContent(url).then(() => {
-                if (
-                    searchSessionId === inventoryKeywordSearchSessionId
-                    && inventoryKeywordSearchTerm === term
-                ) {
-                    if (!queuedAsyncRefresh) {
-                        queuedAsyncRefresh = true;
-                        setTimeout(() => {
-                            queuedAsyncRefresh = false;
-                            applyKeywordSearch(term, searchSessionId, false, false);
-                        }, 0);
-                    }
-                }
-            });
-        });
-    }
-
-    function filterByKeyword() {
-        const input = document.getElementById('keywordSearch');
-        if (!input) return;
-        const term = input.value.trim().toLowerCase();
-        if (term.length < 3) {
-            alert('Enter at least 3 letters to search.');
-            return;
-        }
-        inventoryKeywordSearchSessionId += 1;
-        inventoryKeywordSearchTerm = term;
-        applyKeywordSearch(term, inventoryKeywordSearchSessionId, true, true);
-    }
-    function clearKeywordSearch() {
-        const input = document.getElementById('keywordSearch');
-        if (input) input.value = '';
-        inventoryKeywordSearchSessionId += 1;
-        inventoryKeywordSearchTerm = '';
-        inventoryRemoteMatchKeys = new Set();
-        filteredProducts = products;
-        inventoryPage = 1;
-        showInventory(isSortedByLocation);
-    }
     // Pagination controls
     function nextInventoryPage() {
         inventoryPage++;
@@ -1117,9 +1149,9 @@ function showMakeSaleForm() {
             <button id="startSaleCameraBtn" style="margin-bottom:1rem;">Start Camera</button>
             <div id="saleBarcodeArea" style="margin-bottom:1rem;"></div>
             <form id="makeSaleForm">
-                <label for="productSelect">Select Product:</label>
+                <label for="productSelect">Select Item Title:</label>
                 <select id="productSelect" required>
-                    <option value="">Choose a product</option>
+                    <option value="">Choose an item</option>
         `;
         products.forEach((product, index) => {
             if (product.quantity > 0) {
@@ -1128,7 +1160,7 @@ function showMakeSaleForm() {
         });
         html += `
                 </select>
-                <label for="saleQuantity">Quantity:</label>
+                <label for="saleQuantity">Qty:</label>
                 <input type="number" id="saleQuantity" min="1" required>
                 <button type="submit">Complete Sale</button>
             </form>
@@ -1160,7 +1192,7 @@ function showMakeSaleForm() {
                             const idx = products.findIndex(p => p.sku === decodedText && p.quantity > 0);
                             if (idx !== -1) {
                                 document.getElementById('productSelect').value = idx;
-                                barcodeArea.innerHTML = `<span style='color:green;'>Product selected: ${products[idx].name} (SKU: ${products[idx].sku})</span>`;
+                                barcodeArea.innerHTML = `<span style='color:green;'>Item Title selected: ${products[idx].name} (SKU: ${products[idx].sku})</span>`;
                                 stopSaleCamera();
                             } else {
                                 barcodeArea.innerHTML = `<span style='color:red;'>SKU not found or out of stock: ${decodedText}</span>`;
@@ -1199,6 +1231,7 @@ function makeSale(e) {
     
     // Deduct from inventory
     product.quantity -= quantity;
+    applySaleToInventoryRow(product, product.price);
     
     // Record sale
     const saleAmount = product.price * quantity;
@@ -1211,12 +1244,12 @@ function makeSale(e) {
         price: product.price,
         total: saleAmount,
         profit: profit,
-        date: new Date().toLocaleString(),
+        date: formatDateMMDDYYYY(new Date()),
         pickedUp: false
     });
     
     saveData();
-    alert(`Sale completed! Total: $${saleAmount.toFixed(2)}`);
+    alert(`Sale completed! Total Price: $${saleAmount.toFixed(2)}`);
     showInventory();
 }
 
@@ -1226,8 +1259,8 @@ function showSalesSummary() {
     
     mainContent.innerHTML = `
         <h2>Sales Summary</h2>
-        <p>Total Sales: ${totalSales}</p>
-        <p>Total Revenue: $${totalRevenue.toFixed(2)}</p>
+        <p>Sold Count: ${totalSales}</p>
+        <p>Sold For Total: $${totalRevenue.toFixed(2)}</p>
     `;
 }
 
@@ -1266,12 +1299,12 @@ function showSalesDetails() {
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th>
+                        <th>Sold Date</th>
                         <th>SKU</th>
-                        <th>Product</th>
-                        <th>Quantity</th>
-                        <th>Price</th>
-                        <th>Total</th>
+                        <th>Item Title</th>
+                        <th>Qty</th>
+                        <th>Item Price</th>
+                        <th>Total Price</th>
                         <th>Profit</th>
                         <th>Picked Up</th>
                     </tr>
@@ -1283,7 +1316,7 @@ function showSalesDetails() {
             const rowColor = sale.profit > 0 ? 'lightgreen' : sale.profit < 0 ? 'lightcoral' : 'white';
             html += `
                 <tr style="background-color: ${rowColor};">
-                    <td>${sale.date}</td>
+                    <td>${formatDateMMDDYYYY(sale.date)}</td>
                     <td>${sale.sku}</td>
                     <td>${sale.name}</td>
                     <td>${sale.quantity}</td>
@@ -1301,18 +1334,119 @@ function showSalesDetails() {
 
 function toggleSort() {
     isSortedByLocation = !isSortedByLocation;
+    inventorySortField = isSortedByLocation ? 'location' : '';
+    inventorySortDirection = 'asc';
     showInventory(isSortedByLocation);
 }
 
 function filterByLocation() {
-    const term = document.getElementById('locationSearch').value.toLowerCase();
-    filteredProducts = products.filter(p => (p.location || '').toLowerCase().includes(term));
+    const term = document.getElementById('locationSearch').value.toLowerCase().trim();
+    inventoryLocationTerm = term;
+    inventoryPage = 1;
     showInventory(isSortedByLocation);
 }
 
 function clearLocationSearch() {
     document.getElementById('locationSearch').value = '';
-    filteredProducts = products;
+    inventoryLocationTerm = '';
+    inventoryPage = 1;
+    showInventory(isSortedByLocation);
+}
+
+function filterByKeyword() {
+    const input = document.getElementById('keywordSearch');
+    if (!input) return;
+    const term = input.value.trim().toLowerCase();
+    if (term.length < 3) {
+        alert('Enter at least 3 letters to search.');
+        return;
+    }
+    inventoryKeywordTerm = term;
+    inventoryPage = 1;
+    showInventory(isSortedByLocation);
+}
+
+function clearKeywordSearch() {
+    const input = document.getElementById('keywordSearch');
+    if (input) input.value = '';
+    inventoryKeywordTerm = '';
+    inventoryPage = 1;
+    showInventory(isSortedByLocation);
+}
+
+function updateInventoryFieldPlaceholder() {
+    const fieldSelect = document.getElementById('fieldFilterSelect');
+    const fieldInput = document.getElementById('fieldFilterValue');
+    if (!fieldSelect || !fieldInput) {
+        return;
+    }
+    inventoryFieldFilter = fieldSelect.value;
+    fieldInput.placeholder = getInventoryFieldPlaceholder();
+}
+
+function filterBySelectedField() {
+    const fieldSelect = document.getElementById('fieldFilterSelect');
+    const fieldInput = document.getElementById('fieldFilterValue');
+    if (!fieldSelect || !fieldInput) {
+        return;
+    }
+    const field = fieldSelect.value;
+    const term = fieldInput.value.trim().toLowerCase();
+    if (!field) {
+        alert("Choose Brand, Seller, Rec'd, List Date, Sold Date, or Order # first.");
+        return;
+    }
+    if (term.length < 1) {
+        alert('Enter a value to filter.');
+        return;
+    }
+    inventoryFieldFilter = field;
+    inventoryFieldTerm = term;
+    inventoryPage = 1;
+    showInventory(isSortedByLocation);
+}
+
+function clearFieldFilter() {
+    const fieldSelect = document.getElementById('fieldFilterSelect');
+    const fieldInput = document.getElementById('fieldFilterValue');
+    if (fieldSelect) {
+        fieldSelect.value = '';
+    }
+    if (fieldInput) {
+        fieldInput.value = '';
+        fieldInput.placeholder = "Choose Brand, Seller, Rec'd, List Date, Sold Date, or Order #";
+    }
+    inventoryFieldFilter = '';
+    inventoryFieldTerm = '';
+    inventoryPage = 1;
+    showInventory(isSortedByLocation);
+}
+
+function applySortField() {
+    const sortSelect = document.getElementById('sortFieldSelect');
+    const nextSortField = sortSelect ? sortSelect.value : '';
+    if (inventorySortField !== nextSortField) {
+        inventorySortDirection = 'asc';
+    }
+    inventorySortField = nextSortField;
+    isSortedByLocation = inventorySortField === 'location';
+    inventoryPage = 1;
+    showInventory(isSortedByLocation);
+}
+
+function sortInventoryByField(field) {
+    if (inventorySortField === field) {
+        inventorySortDirection = inventorySortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        inventorySortField = field;
+        inventorySortDirection = 'asc';
+    }
+    isSortedByLocation = field === 'location';
+    const sortSelect = document.getElementById('sortFieldSelect');
+    if (sortSelect) {
+        sortSelect.value = field;
+    }
+    inventoryPage = 1;
     showInventory(isSortedByLocation);
 }
 

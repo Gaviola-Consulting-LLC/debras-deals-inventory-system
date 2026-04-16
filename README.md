@@ -5,7 +5,7 @@ A mobile-friendly inventory and sales tracking web app built with HTML, CSS, and
 ## Features
 - Add, edit, and manage products by SKU
 - Inventory tracking with quantity deduction on sale
-- Excel spreadsheet import across all workbook tabs
+- Excel spreadsheet import merged by SKU using the canonical Debras inventory spreadsheet_1 schema
 - Hyperlink support for product URLs
 - Inventory keyword fallback search against linked Item Title URL content (🌐 indicator for remote matches)
 - Location search and optional sorting by location

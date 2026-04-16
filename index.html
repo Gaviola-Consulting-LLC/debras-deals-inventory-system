@@ -7,10 +7,11 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Debra's Deals Inventory System</title>
-    <link rel="stylesheet" href="styles.css?v=20260404-001">
+    <link rel="stylesheet" href="styles.css?v=20260416-004">
 </head>
 <body>
-    <div id="barcodeLibStatus" style="background:#fffbe6;color:#b36b00;padding:0.5em 1em;text-align:center;font-size:1.1em;"></div>
+    <div id="barcodeLibStatus" class="barcode-lib-status"></div>
+    <!-- Password overlay removed -->
     <header>
         <h1>Debra's Deals Inventory System</h1>
     </header>
@@ -26,9 +27,9 @@
     <main id="mainContent">
         <!-- Dynamic content will be loaded here -->
     </main>
-    <footer style="text-align:center;padding:1rem 0;font-size:0.95rem;color:#555;background:#f9f9f9;border-top:1px solid #eee;">
+    <footer class="app-footer">
         &copy; 2026 Gaviola Consulting, LLC. All Rights Reserved.<br>
-        <span style="font-size:0.93em;display:block;margin-top:0.5em;">
+        <span class="app-footer-copy">
         Intellectual Property Ownership:<br>
         The Software, including but not limited to its object code, source code, visual expressions, screen displays, graphics, design, and underlying algorithms, is the sole and exclusive property of Gaviola Consulting, LLC.<br>
         All right, title, and interest in and to the Software, including all associated Intellectual Property Rights (including, without limitation, copyrights, trademarks, and trade secrets), shall at all times remain vested in Gaviola Consulting, LLC. No license, lease, or sale of the software to any third party shall be construed as a transfer of ownership.<br><br>
@@ -42,22 +43,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Barcode scanner library: load before script.js -->
     <script src="lib/html5-qrcode.min.js" onerror="alert('Local barcode scanner library failed to load. Please ensure lib/html5-qrcode.min.js exists.');"></script>
-    <script src="lib/inventory-search-utils.js?v=20260416-001"></script>
-    <script src="script.js?v=20260404-001"></script>
-            <script>
-            // Diagnostic: Show if barcode scanner library is loaded
-            window.addEventListener('DOMContentLoaded', function() {
-                var statusDiv = document.getElementById('barcodeLibStatus');
-                if (window.Html5Qrcode) {
-                    statusDiv.style.background = '#e6ffed';
-                    statusDiv.style.color = '#237804';
-                    statusDiv.textContent = 'Barcode scanner library loaded successfully.';
-                } else {
-                    statusDiv.style.background = '#fff1f0';
-                    statusDiv.style.color = '#a8071a';
-                    statusDiv.textContent = 'Barcode scanner library NOT loaded. Camera scanning will not work.';
-                }
-            });
-            </script>
+    <script src="script.js?v=20260416-004"></script>
+    <script>
+    // Diagnostic: Show if barcode scanner library is loaded
+    window.addEventListener('DOMContentLoaded', function() {
+        var statusDiv = document.getElementById('barcodeLibStatus');
+        if (window.Html5Qrcode) {
+            statusDiv.className = 'barcode-lib-status barcode-lib-status--ready';
+            statusDiv.textContent = 'Barcode scanner library loaded successfully.';
+        } else {
+            statusDiv.className = 'barcode-lib-status barcode-lib-status--error';
+            statusDiv.textContent = 'Barcode scanner library NOT loaded. Camera scanning will not work.';
+        }
+    });
+    </script>
+    <!-- Password script removed -->
 </body>
 </html>

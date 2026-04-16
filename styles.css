@@ -43,6 +43,39 @@ main {
     margin: 0 auto;
 }
 
+.barcode-lib-status {
+    background: #fffbe6;
+    color: #b36b00;
+    padding: 0.5em 1em;
+    text-align: center;
+    font-size: 1.1em;
+}
+
+.barcode-lib-status--ready {
+    background: #e6ffed;
+    color: #237804;
+}
+
+.barcode-lib-status--error {
+    background: #fff1f0;
+    color: #a8071a;
+}
+
+.app-footer {
+    text-align: center;
+    padding: 1rem 0;
+    font-size: 0.95rem;
+    color: #555;
+    background: #f9f9f9;
+    border-top: 1px solid #eee;
+}
+
+.app-footer-copy {
+    font-size: 0.93em;
+    display: block;
+    margin-top: 0.5em;
+}
+
 /* Forms */
 form {
     background-color: white;

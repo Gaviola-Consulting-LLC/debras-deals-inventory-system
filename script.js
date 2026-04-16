@@ -625,6 +625,23 @@ function updateProduct(e, oldSku) {
     showInventory();
 }
 
+function deleteProductBySku(sku) {
+    if (!sku) return;
+    const confirmed = window.confirm('Are you sure you want to delete this inventory item?');
+    if (!confirmed) return;
+
+    const productIndex = products.findIndex(p => p.sku === sku);
+    if (productIndex === -1) return;
+
+    const [deletedProduct] = products.splice(productIndex, 1);
+    filteredProducts = filteredProducts.filter(product => product.sku !== sku);
+    if (deletedProduct) {
+        inventoryRemoteMatchKeys.delete(getProductMatchKey(deletedProduct));
+    }
+    saveData();
+    showInventory(isSortedByLocation);
+}
+
 function showScanForm() {
     mainContent.innerHTML = `
         <h2>Scan SKU (Barcode or Manual)</h2>
@@ -884,6 +901,7 @@ function showInventory(sortByLocation = false) {
                             <th>Purchaser</th>
                             <th>Notes</th>
                             <th>Link</th>
+                            <th>Search Match</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -918,6 +936,7 @@ function showInventory(sortByLocation = false) {
                 const price = parseMoneyValue(product.price);
                 const totalPrice = parseMoneyValue(product.totalPrice);
                 const sku = product.sku || '';
+                const encodedSku = encodeURIComponent(sku);
                 const location = product.location || '';
                 const listDate = formatDateMMDDYYYY(product.listDate);
                 const soldDate = formatDateMMDDYYYY(product.soldDate);
@@ -968,7 +987,8 @@ function showInventory(sortByLocation = false) {
                         <td>${purchaser}</td>
                         <td>${notes}</td>
                         <td>${hyperlink}</td>
-                        <td><button onclick="editProduct('${escapedSku}')">Edit</button></td>
+                        <td>${isRemoteMatch ? 'indicates the keyword was matched in linked Item Title page content.' : ''}</td>
+                        <td><button onclick="editProduct('${escapedSku}')">Edit</button> <button type="button" class="delete-product-btn" data-sku="${encodedSku}">Delete</button></td>
                     </tr>
                 `;
             }
@@ -985,6 +1005,12 @@ function showInventory(sortByLocation = false) {
             if (kwBtn) {
                 kwBtn.onclick = filterByKeyword;
             }
+            document.querySelectorAll('.delete-product-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const sku = decodeURIComponent(this.getAttribute('data-sku') || '');
+                    deleteProductBySku(sku);
+                });
+            });
         }, 0);
     // Advanced search by any field, min 3 letters + hyperlink content fallback
     let queuedAsyncRefresh = false;
@@ -1004,7 +1030,7 @@ function showInventory(sortByLocation = false) {
             });
             if (localMatch) return true;
 
-            const url = getValidHyperlinkUrl(product.name);
+            const url = getValidHyperlinkUrl(product.hyperlink);
             if (!url) return false;
 
             if (hyperlinkContentCache.has(url)) {

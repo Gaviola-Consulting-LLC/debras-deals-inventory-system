@@ -214,6 +214,19 @@ const ITEMS_PER_PAGE = 100;
 const hyperlinkContentCache = new Map();
 const hyperlinkFetchPromises = new Map();
 let inventoryKeywordSearchTerm = '';
+let inventoryKeywordSearchSessionId = 0;
+const HYPERLINK_CONTENT_CACHE_LIMIT = 200;
+
+function setCachedHyperlinkContent(url, content) {
+    if (hyperlinkContentCache.has(url)) {
+        hyperlinkContentCache.delete(url);
+    }
+    if (hyperlinkContentCache.size >= HYPERLINK_CONTENT_CACHE_LIMIT) {
+        const oldestKey = hyperlinkContentCache.keys().next().value;
+        if (oldestKey) hyperlinkContentCache.delete(oldestKey);
+    }
+    hyperlinkContentCache.set(url, content);
+}
 
 function getValidHyperlinkUrl(value) {
     if (typeof value !== 'string') return null;
@@ -222,8 +235,14 @@ function getValidHyperlinkUrl(value) {
     if (!/^https?:\/\//i.test(url)) {
         url = 'https://' + url;
     }
-    if (!/^https?:\/\/.+\..+/i.test(url) || /\s/.test(url)) return null;
-    return url;
+    if (/\s/.test(url)) return null;
+    try {
+        const parsedUrl = new URL(url);
+        if (!/^https?:$/i.test(parsedUrl.protocol)) return null;
+        return parsedUrl.href;
+    } catch (error) {
+        return null;
+    }
 }
 
 function extractVisibleTextFromHtml(html) {
@@ -251,11 +270,11 @@ function fetchHyperlinkContent(url) {
         })
         .then(html => {
             const visibleText = extractVisibleTextFromHtml(html);
-            hyperlinkContentCache.set(url, visibleText);
+            setCachedHyperlinkContent(url, visibleText);
             return visibleText;
         })
         .catch(() => {
-            hyperlinkContentCache.set(url, '');
+            setCachedHyperlinkContent(url, '');
             return '';
         })
         .finally(() => {
@@ -945,7 +964,10 @@ function showInventory(sortByLocation = false) {
             }
         }, 0);
     // Advanced search by any field, min 3 letters + hyperlink content fallback
-    function applyKeywordSearch(term, allowHyperlinkFetches = true, resetPage = false) {
+    let queuedAsyncRefresh = false;
+
+    function applyKeywordSearch(term, searchSessionId, allowHyperlinkFetches = true, resetPage = false) {
+        if (searchSessionId !== inventoryKeywordSearchSessionId || inventoryKeywordSearchTerm !== term) return;
         const pendingUrls = new Set();
         const matchedProducts = products.filter(product => {
             const localMatch = Object.keys(product).some(key => {
@@ -979,8 +1001,17 @@ function showInventory(sortByLocation = false) {
 
         pendingUrls.forEach(url => {
             fetchHyperlinkContent(url).then(() => {
-                if (inventoryKeywordSearchTerm === term) {
-                    applyKeywordSearch(term, false, false);
+                if (
+                    searchSessionId === inventoryKeywordSearchSessionId
+                    && inventoryKeywordSearchTerm === term
+                ) {
+                    if (!queuedAsyncRefresh) {
+                        queuedAsyncRefresh = true;
+                        setTimeout(() => {
+                            queuedAsyncRefresh = false;
+                            applyKeywordSearch(term, searchSessionId, false, false);
+                        }, 0);
+                    }
                 }
             });
         });
@@ -994,12 +1025,14 @@ function showInventory(sortByLocation = false) {
             alert('Enter at least 3 letters to search.');
             return;
         }
+        inventoryKeywordSearchSessionId += 1;
         inventoryKeywordSearchTerm = term;
-        applyKeywordSearch(term, true, true);
+        applyKeywordSearch(term, inventoryKeywordSearchSessionId, true, true);
     }
     function clearKeywordSearch() {
         const input = document.getElementById('keywordSearch');
         if (input) input.value = '';
+        inventoryKeywordSearchSessionId += 1;
         inventoryKeywordSearchTerm = '';
         filteredProducts = products;
         inventoryPage = 1;

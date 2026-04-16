@@ -1,0 +1,13 @@
+{
+  "name": "debras-deals-inventory-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Debra's Deals Inventory System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

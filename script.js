@@ -215,7 +215,22 @@ const hyperlinkContentCache = new Map();
 const hyperlinkFetchPromises = new Map();
 let inventoryKeywordSearchTerm = '';
 let inventoryKeywordSearchSessionId = 0;
+let inventoryRemoteMatchKeys = new Set();
 const HYPERLINK_CONTENT_CACHE_LIMIT = 200;
+const PROXY_FETCH_ENDPOINT = '/proxy/fetch';
+const searchUtils = window.InventorySearchUtils || {
+    isValidUrl: (value) => {
+        try {
+            const parsed = new URL(value);
+            return /^https?:$/i.test(parsed.protocol);
+        } catch (error) {
+            return false;
+        }
+    },
+    stripHtmlTags: (html) => typeof html === 'string' ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '',
+    getSessionCache: () => null,
+    setSessionCache: () => {}
+};
 
 function setCachedHyperlinkContent(url, content) {
     if (hyperlinkContentCache.has(url)) {
@@ -236,28 +251,26 @@ function getValidHyperlinkUrl(value) {
         url = 'https://' + url;
     }
     if (/\s/.test(url)) return null;
-    try {
-        const parsedUrl = new URL(url);
-        if (!/^https?:$/i.test(parsedUrl.protocol)) return null;
-        return parsedUrl.href;
-    } catch (error) {
-        return null;
-    }
+    if (!searchUtils.isValidUrl(url)) return null;
+    return new URL(url).href;
 }
 
-function extractVisibleTextFromHtml(html) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    doc.querySelectorAll('script,style,noscript,template').forEach(node => node.remove());
-    const text = (doc.body && (doc.body.innerText || doc.body.textContent))
-        || (doc.documentElement && (doc.documentElement.innerText || doc.documentElement.textContent))
-        || '';
-    return text.replace(/\s+/g, ' ').trim();
+function getProxyFetchUrl(url) {
+    return `${PROXY_FETCH_ENDPOINT}?url=${encodeURIComponent(url)}`;
+}
+
+function getProductMatchKey(product) {
+    return product ? (product.sku || product.name || '') : '';
 }
 
 function fetchHyperlinkContent(url) {
     if (hyperlinkContentCache.has(url)) {
         return Promise.resolve(hyperlinkContentCache.get(url));
+    }
+    const cachedSessionContent = searchUtils.getSessionCache(url);
+    if (typeof cachedSessionContent === 'string') {
+        setCachedHyperlinkContent(url, cachedSessionContent);
+        return Promise.resolve(cachedSessionContent);
     }
     if (hyperlinkFetchPromises.has(url)) {
         return hyperlinkFetchPromises.get(url);
@@ -266,18 +279,20 @@ function fetchHyperlinkContent(url) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const request = fetch(url, { signal: controller.signal })
+    const request = fetch(getProxyFetchUrl(url), { signal: controller.signal })
         .then(response => {
             if (!response.ok) throw new Error('Failed to fetch URL');
             return response.text();
         })
-        .then(html => {
-            const visibleText = extractVisibleTextFromHtml(html);
+        .then(text => {
+            const visibleText = searchUtils.stripHtmlTags(text).toLowerCase();
             setCachedHyperlinkContent(url, visibleText);
+            searchUtils.setSessionCache(url, visibleText);
             return visibleText;
         })
         .catch(() => {
             setCachedHyperlinkContent(url, '');
+            searchUtils.setSessionCache(url, '');
             return '';
         })
         .finally(() => {
@@ -833,6 +848,9 @@ function showInventory(sortByLocation = false) {
         html += `<input type="text" id="locationSearch" placeholder="Search by location" style="width:160px;max-width:60vw;"> <button onclick="filterByLocation()">Search</button> <button onclick="clearLocationSearch()">Clear</button><br>`;
         const buttonText = isSortedByLocation ? 'Unsort by Location' : 'Sort by Location';
         html += `<button onclick="toggleSort()">${buttonText}</button>`;
+        if (inventoryKeywordSearchTerm) {
+            html += `<div style="margin-top:0.5rem;color:#2a5ea8;">🌐 indicates the keyword was matched in linked Item Title page content.</div>`;
+        }
         // Pagination controls
         const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
         if (inventoryPage > totalPages) inventoryPage = totalPages;
@@ -880,6 +898,7 @@ function showInventory(sortByLocation = false) {
                 const descPuDate = formatDescPuDateValue(product.descPuDate);
                 const asin = product.asin || '';
                 let name = product.name || '';
+                const isRemoteMatch = inventoryRemoteMatchKeys.has(getProductMatchKey(product));
                 // If Item Title looks like a URL, make it clickable
                 if (name) {
                     let url = name.trim();
@@ -935,7 +954,7 @@ function showInventory(sortByLocation = false) {
                         <td>${condition}</td>
                         <td>${descPuDate}</td>
                         <td>${asin}</td>
-                        <td>${name}</td>
+                        <td>${name}${isRemoteMatch ? ` <span title="Matched in linked page content" style="color:#2a5ea8;font-weight:700;">🌐</span>` : ''}</td>
                         <td>${quantity}</td>
                         <td>$${price !== null ? price.toFixed(2) : ''}</td>
                         <td>$${totalPrice !== null ? totalPrice.toFixed(2) : ''}</td>
@@ -973,6 +992,7 @@ function showInventory(sortByLocation = false) {
     function applyKeywordSearch(term, searchSessionId, allowHyperlinkFetches = true, resetPage = false) {
         if (searchSessionId !== inventoryKeywordSearchSessionId || inventoryKeywordSearchTerm !== term) return;
         const pendingUrls = new Set();
+        const remoteMatchKeys = new Set();
         const matchedProducts = products.filter(product => {
             const localMatch = Object.keys(product).some(key => {
                 const val = product[key];
@@ -984,11 +1004,15 @@ function showInventory(sortByLocation = false) {
             });
             if (localMatch) return true;
 
-            const url = getValidHyperlinkUrl(product.hyperlink);
+            const url = getValidHyperlinkUrl(product.name);
             if (!url) return false;
 
             if (hyperlinkContentCache.has(url)) {
-                return hyperlinkContentCache.get(url).toLowerCase().includes(term);
+                const isRemoteMatch = hyperlinkContentCache.get(url).includes(term);
+                if (isRemoteMatch) {
+                    remoteMatchKeys.add(getProductMatchKey(product));
+                }
+                return isRemoteMatch;
             }
 
             if (allowHyperlinkFetches) {
@@ -998,6 +1022,7 @@ function showInventory(sortByLocation = false) {
         });
 
         filteredProducts = matchedProducts;
+        inventoryRemoteMatchKeys = remoteMatchKeys;
         if (resetPage) inventoryPage = 1;
         showInventory(isSortedByLocation);
 
@@ -1038,6 +1063,7 @@ function showInventory(sortByLocation = false) {
         if (input) input.value = '';
         inventoryKeywordSearchSessionId += 1;
         inventoryKeywordSearchTerm = '';
+        inventoryRemoteMatchKeys = new Set();
         filteredProducts = products;
         inventoryPage = 1;
         showInventory(isSortedByLocation);

@@ -211,6 +211,83 @@ let isSortedByLocation = false;
 let filteredProducts = products;
 let inventoryPage = 1;
 const ITEMS_PER_PAGE = 100;
+const hyperlinkContentCache = new Map();
+const hyperlinkFetchPromises = new Map();
+let inventoryKeywordSearchTerm = '';
+let inventoryKeywordSearchSessionId = 0;
+const HYPERLINK_CONTENT_CACHE_LIMIT = 200;
+
+function setCachedHyperlinkContent(url, content) {
+    if (hyperlinkContentCache.has(url)) {
+        hyperlinkContentCache.delete(url);
+    }
+    if (hyperlinkContentCache.size >= HYPERLINK_CONTENT_CACHE_LIMIT) {
+        const oldestKey = hyperlinkContentCache.keys().next().value;
+        if (oldestKey) hyperlinkContentCache.delete(oldestKey);
+    }
+    hyperlinkContentCache.set(url, content);
+}
+
+function getValidHyperlinkUrl(value) {
+    if (typeof value !== 'string') return null;
+    let url = value.trim();
+    if (!url) return null;
+    if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+    }
+    if (/\s/.test(url)) return null;
+    try {
+        const parsedUrl = new URL(url);
+        if (!/^https?:$/i.test(parsedUrl.protocol)) return null;
+        return parsedUrl.href;
+    } catch (error) {
+        return null;
+    }
+}
+
+function extractVisibleTextFromHtml(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    doc.querySelectorAll('script,style,noscript,template').forEach(node => node.remove());
+    const text = (doc.body && (doc.body.innerText || doc.body.textContent))
+        || (doc.documentElement && (doc.documentElement.innerText || doc.documentElement.textContent))
+        || '';
+    return text.replace(/\s+/g, ' ').trim();
+}
+
+function fetchHyperlinkContent(url) {
+    if (hyperlinkContentCache.has(url)) {
+        return Promise.resolve(hyperlinkContentCache.get(url));
+    }
+    if (hyperlinkFetchPromises.has(url)) {
+        return hyperlinkFetchPromises.get(url);
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const request = fetch(url, { signal: controller.signal })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to fetch URL');
+            return response.text();
+        })
+        .then(html => {
+            const visibleText = extractVisibleTextFromHtml(html);
+            setCachedHyperlinkContent(url, visibleText);
+            return visibleText;
+        })
+        .catch(() => {
+            setCachedHyperlinkContent(url, '');
+            return '';
+        })
+        .finally(() => {
+            clearTimeout(timeoutId);
+            hyperlinkFetchPromises.delete(url);
+        });
+
+    hyperlinkFetchPromises.set(url, request);
+    return request;
+}
 // Patch: Expose pagination functions globally so HTML buttons work
 window.nextInventoryPage = function() {
     inventoryPage++;
@@ -890,7 +967,60 @@ function showInventory(sortByLocation = false) {
                 kwBtn.onclick = filterByKeyword;
             }
         }, 0);
-    // Advanced search by any field, min 3 letters
+    // Advanced search by any field, min 3 letters + hyperlink content fallback
+    let queuedAsyncRefresh = false;
+
+    function applyKeywordSearch(term, searchSessionId, allowHyperlinkFetches = true, resetPage = false) {
+        if (searchSessionId !== inventoryKeywordSearchSessionId || inventoryKeywordSearchTerm !== term) return;
+        const pendingUrls = new Set();
+        const matchedProducts = products.filter(product => {
+            const localMatch = Object.keys(product).some(key => {
+                const val = product[key];
+                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
+                if (Array.isArray(val)) {
+                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
+                }
+                return false;
+            });
+            if (localMatch) return true;
+
+            const url = getValidHyperlinkUrl(product.hyperlink);
+            if (!url) return false;
+
+            if (hyperlinkContentCache.has(url)) {
+                return hyperlinkContentCache.get(url).toLowerCase().includes(term);
+            }
+
+            if (allowHyperlinkFetches) {
+                pendingUrls.add(url);
+            }
+            return false;
+        });
+
+        filteredProducts = matchedProducts;
+        if (resetPage) inventoryPage = 1;
+        showInventory(isSortedByLocation);
+
+        if (!allowHyperlinkFetches || pendingUrls.size === 0) return;
+
+        pendingUrls.forEach(url => {
+            fetchHyperlinkContent(url).then(() => {
+                if (
+                    searchSessionId === inventoryKeywordSearchSessionId
+                    && inventoryKeywordSearchTerm === term
+                ) {
+                    if (!queuedAsyncRefresh) {
+                        queuedAsyncRefresh = true;
+                        setTimeout(() => {
+                            queuedAsyncRefresh = false;
+                            applyKeywordSearch(term, searchSessionId, false, false);
+                        }, 0);
+                    }
+                }
+            });
+        });
+    }
+
     function filterByKeyword() {
         const input = document.getElementById('keywordSearch');
         if (!input) return;
@@ -899,22 +1029,15 @@ function showInventory(sortByLocation = false) {
             alert('Enter at least 3 letters to search.');
             return;
         }
-        filteredProducts = products.filter(p => {
-            return Object.keys(p).some(key => {
-                let val = p[key];
-                if (typeof val === 'string' && val.toLowerCase().includes(term)) return true;
-                if (Array.isArray(val)) {
-                    return val.some(note => typeof note.text === 'string' && note.text.toLowerCase().includes(term));
-                }
-                return false;
-            });
-        });
-        inventoryPage = 1;
-        showInventory(isSortedByLocation);
+        inventoryKeywordSearchSessionId += 1;
+        inventoryKeywordSearchTerm = term;
+        applyKeywordSearch(term, inventoryKeywordSearchSessionId, true, true);
     }
     function clearKeywordSearch() {
         const input = document.getElementById('keywordSearch');
         if (input) input.value = '';
+        inventoryKeywordSearchSessionId += 1;
+        inventoryKeywordSearchTerm = '';
         filteredProducts = products;
         inventoryPage = 1;
         showInventory(isSortedByLocation);

@@ -277,6 +277,11 @@ function normalizeProduct(product = {}) {
 function mergeProductData(existingProduct, importedProduct, importedFields) {
     const mergedProduct = normalizeProduct(existingProduct);
     importedFields.forEach(field => {
+        if (field === 'name' || field === 'seller') {
+            mergedProduct[field] = normalizeText(importedProduct[field]);
+            return;
+        }
+
         if (field === 'notes') {
             const existingNotes = normalizeNotes(mergedProduct.notes);
             const incomingNotes = normalizeNotes(importedProduct.notes);
@@ -606,6 +611,13 @@ function uploadSpreadsheet(e) {
                         importedFields.push(field);
                     }
                 });
+
+                if (colMap.name !== undefined && !importedFields.includes('name')) {
+                    importedFields.push('name');
+                }
+                if (colMap.seller !== undefined && !importedFields.includes('seller')) {
+                    importedFields.push('seller');
+                }
 
                 const noteText = normalizeText(getWorksheetCellValue(worksheet, r, colMap.notes));
                 if (noteText) {

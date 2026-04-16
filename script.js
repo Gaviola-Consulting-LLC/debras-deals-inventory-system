@@ -66,6 +66,7 @@ let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
 const CANONICAL_SPREADSHEET_NAME = 'Debras inventory spreadsheet_1.xlsx';
 const CANONICAL_SHEET_NAME = 'Fresh Start';
+const ALLOWED_SPREADSHEET_EXTENSIONS = ['.xlsx', '.xls'];
 const SPREADSHEET_FIELD_ALIASES = {
     condition: ['condition'],
     desc: ['desc', 'description', 'desc/pu date', 'desc pu date'],
@@ -666,7 +667,8 @@ async function uploadSpreadsheet(e) {
     try {
         for (const file of files) {
             const lowerCaseName = (file.name || '').toLowerCase();
-            if (!lowerCaseName.endsWith('.xlsx') && !lowerCaseName.endsWith('.xls')) {
+            const isAllowedSpreadsheet = ALLOWED_SPREADSHEET_EXTENSIONS.some(extension => lowerCaseName.endsWith(extension));
+            if (!isAllowedSpreadsheet) {
                 failedFiles.push(file.name || 'Unknown file');
                 continue;
             }
@@ -687,7 +689,7 @@ async function uploadSpreadsheet(e) {
             showInventory();
         }
 
-        const failedFileSummary = failedFiles.length > 0 ? `\nFailed files (${failedFiles.length}): ${failedFiles.join(', ')}` : '\nFailed files: 0';
+        const failedFileSummary = `\nFailed files (${failedFiles.length})${failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''}`;
         alert(`Import complete.\nFiles processed: ${files.length}\nAdded: ${totalAddedCount}\nUpdated: ${totalUpdatedCount}${failedFileSummary}`);
     } finally {
         if (submitButton) {

@@ -1,62 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>Debra's Deals Inventory System</title>
-    <link rel="stylesheet" href="styles.css?v=20260416-004">
-</head>
-<body>
-    <div id="barcodeLibStatus" class="barcode-lib-status"></div>
-    <!-- Password overlay removed -->
-    <header>
-        <h1>Debra's Deals Inventory System</h1>
-    </header>
-    <nav>
-        <button id="uploadSpreadsheetBtn">Upload Spreadsheet</button>
-        <button id="addProductBtn">Add Product</button>
-        <button id="viewInventoryBtn">View Inventory</button>
-        <button id="scanSkuBtn">Scan SKU</button>
-        <button id="makeSaleBtn">Make Sale</button>
-        <button id="salesSummaryBtn">Sales Summary</button>
-        <button id="salesDetailsBtn">Sales Details</button>
-    </nav>
-    <main id="mainContent">
-        <!-- Dynamic content will be loaded here -->
-    </main>
-    <footer class="app-footer">
-        &copy; 2026 Gaviola Consulting, LLC. All Rights Reserved.<br>
-        <span class="app-footer-copy">
-        Intellectual Property Ownership:<br>
-        The Software, including but not limited to its object code, source code, visual expressions, screen displays, graphics, design, and underlying algorithms, is the sole and exclusive property of Gaviola Consulting, LLC.<br>
-        All right, title, and interest in and to the Software, including all associated Intellectual Property Rights (including, without limitation, copyrights, trademarks, and trade secrets), shall at all times remain vested in Gaviola Consulting, LLC. No license, lease, or sale of the software to any third party shall be construed as a transfer of ownership.<br><br>
-        Usage Restrictions (The "No Reverse Engineering" Clause):<br>
-        Users are strictly prohibited from:<br>
-        Modifying, copying, or creating derivative works based on the Software.<br>
-        Reverse engineering, decompiling, or disassembling the code.<br>
-        Removing or altering any copyright or proprietary notices belonging to Gaviola Consulting, LLC.
-        </span>
-    </footer>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Barcode scanner library: load before script.js -->
-    <script src="lib/html5-qrcode.min.js" onerror="alert('Local barcode scanner library failed to load. Please ensure lib/html5-qrcode.min.js exists.');"></script>
-    <script src="script.js?v=20260416-004"></script>
-    <script>
-    // Diagnostic: Show if barcode scanner library is loaded
-    window.addEventListener('DOMContentLoaded', function() {
-        var statusDiv = document.getElementById('barcodeLibStatus');
-        if (window.Html5Qrcode) {
-            statusDiv.className = 'barcode-lib-status barcode-lib-status--ready';
-            statusDiv.textContent = 'Barcode scanner library loaded successfully.';
-        } else {
-            statusDiv.className = 'barcode-lib-status barcode-lib-status--error';
-            statusDiv.textContent = 'Barcode scanner library NOT loaded. Camera scanning will not work.';
-        }
-    });
-    </script>
-    <!-- Password script removed -->
-</body>
-</html>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

@@ -878,7 +878,7 @@ function showInventory(sortByLocation = false) {
                 `<button onclick='nextInventoryPage()' ${inventoryPage === totalPages ? 'disabled' : ''}>Next &gt;</button></div>`;
         }
         if (filteredProducts.length === 0) {
-            html += '<p>No products match the search.</p>';
+            html += '<p>No products found.</p>';
         } else {
             html += `
                 <table>

@@ -66,6 +66,7 @@ let revenue = parseFloat(localStorage.getItem('revenue')) || 0;
 
 const CANONICAL_SPREADSHEET_NAME = 'Debras inventory spreadsheet_1.xlsx';
 const CANONICAL_SHEET_NAME = 'Fresh Start';
+const ALLOWED_SPREADSHEET_EXTENSIONS = ['.xlsx', '.xls'];
 const SPREADSHEET_FIELD_ALIASES = {
     condition: ['condition'],
     desc: ['desc', 'description', 'desc/pu date', 'desc pu date'],
@@ -514,11 +515,11 @@ function showUploadForm() {
     mainContent.innerHTML = `
         <h2>Upload Spreadsheet</h2>
         <form id="uploadForm" autocomplete="off" novalidate>
-            <label for="fileInput" style="display:block;margin-bottom:1rem;font-weight:bold;">Choose Excel file (.xlsx, .xls):</label>
-            <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required style="font-size:1.1rem;padding:0.5rem;width:100%;max-width:350px;" />
+            <label for="fileInput" style="display:block;margin-bottom:1rem;font-weight:bold;">Choose Excel file(s) (.xlsx, .xls):</label>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" multiple required style="font-size:1.1rem;padding:0.5rem;width:100%;max-width:350px;" />
             <button type="submit" style="margin-top:1rem;">Upload and Import</button>
         </form>
-        <div id="iosHint" style="margin-top:1rem;color:#555;font-size:0.95rem;">Uploads merge into the current Inventory view by SKU. Existing items stay in place, matching SKUs are updated from the spreadsheet, and new SKUs are appended. If you have trouble selecting a file on iPhone/iPad, make sure the file is saved in your Files app, then try again.</div>
+        <div id="iosHint" style="margin-top:1rem;color:#555;font-size:0.95rem;">Uploads merge into the current Inventory view by SKU. Existing items stay in place, matching SKUs are updated from the spreadsheet, and new SKUs are appended. You can select multiple files and they will be imported in order. If you have trouble selecting a file on iPhone/iPad, make sure the file is saved in your Files app, then try again.</div>
     `;
     // Always open file picker, never camera
     const fileInput = document.getElementById('fileInput');
@@ -537,111 +538,165 @@ function showUploadForm() {
     });
 }
 
-function uploadSpreadsheet(e) {
+function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            resolve(e.target.result);
+        };
+        reader.onerror = function() {
+            reject(new Error('Unable to read file.'));
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function importSpreadsheetData(arrayBuffer) {
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, {type: 'array'});
+    const sheetName = workbook.SheetNames.includes(CANONICAL_SHEET_NAME) ? CANONICAL_SHEET_NAME : workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet || !worksheet['!ref']) {
+        throw new Error('The selected workbook does not contain a readable inventory sheet.');
+    }
+
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const maxRow = range.e.r;
+    const maxCol = range.e.c;
+    const headers = [];
+    for (let c = 0; c <= maxCol; c++) {
+        headers.push(getWorksheetCellValue(worksheet, 0, c));
+    }
+    const colMap = getSpreadsheetColumnMap(headers);
+    if (colMap.sku === undefined) {
+        throw new Error(`The workbook must contain the SKU column from ${CANONICAL_SPREADSHEET_NAME}.`);
+    }
+
+    let addedCount = 0;
+    let updatedCount = 0;
+    for (let r = 1; r <= maxRow; r++) {
+        const sku = normalizeText(getWorksheetCellValue(worksheet, r, colMap.sku));
+        if (!sku) {
+            continue;
+        }
+
+        const importedFields = ['sku'];
+        const importedProduct = {
+            sku,
+            condition: normalizeText(getWorksheetCellValue(worksheet, r, colMap.condition)),
+            desc: normalizeText(getWorksheetCellValue(worksheet, r, colMap.desc)),
+            brand: normalizeText(getWorksheetCellValue(worksheet, r, colMap.brand)),
+            asin: normalizeText(getWorksheetCellValue(worksheet, r, colMap.asin)),
+            name: normalizeText(getWorksheetCellValue(worksheet, r, colMap.name)),
+            seller: normalizeText(getWorksheetCellValue(worksheet, r, colMap.seller)),
+            quantity: parseIntegerOrBlank(getWorksheetCellValue(worksheet, r, colMap.quantity)),
+            price: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.price)),
+            totalPrice: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.totalPrice)),
+            cost: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.cost)),
+            location: normalizeText(getWorksheetCellValue(worksheet, r, colMap.location)),
+            receivedDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.receivedDate)),
+            listDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.listDate)),
+            soldDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.soldDate)),
+            retail: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.retail)),
+            soldFor: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.soldFor)),
+            profit: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.profit)),
+            hyperlink: normalizeText(getWorksheetCellValue(worksheet, r, colMap.hyperlink)),
+            orderNumber: normalizeText(getWorksheetCellValue(worksheet, r, colMap.orderNumber)),
+            purchaseName: normalizeText(getWorksheetCellValue(worksheet, r, colMap.purchaseName)),
+            purchaseSource: normalizeText(getWorksheetCellValue(worksheet, r, colMap.purchaseSource)),
+            notes: []
+        };
+
+        Object.keys(colMap).forEach(field => {
+            if (field === 'notes' || field === 'sku') {
+                return;
+            }
+            const rawValue = getWorksheetCellValue(worksheet, r, colMap[field]);
+            if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+                importedFields.push(field);
+            }
+        });
+
+        if (colMap.name !== undefined && !importedFields.includes('name')) {
+            importedFields.push('name');
+        }
+        if (colMap.seller !== undefined && !importedFields.includes('seller')) {
+            importedFields.push('seller');
+        }
+
+        const noteText = normalizeText(getWorksheetCellValue(worksheet, r, colMap.notes));
+        if (noteText) {
+            importedProduct.notes = [{type: 'Product', text: noteText}];
+            importedFields.push('notes');
+        }
+
+        const existingIndex = products.findIndex(product => product.sku === sku);
+        if (existingIndex >= 0) {
+            products[existingIndex] = mergeProductData(products[existingIndex], importedProduct, importedFields);
+            updatedCount++;
+        } else {
+            products.push(normalizeProduct(importedProduct));
+            addedCount++;
+        }
+    }
+
+    return {addedCount, updatedCount};
+}
+
+async function uploadSpreadsheet(e) {
     e.preventDefault();
-    const file = document.getElementById('fileInput').files[0];
-    if (!file) {
-        // No file selected, do nothing
+    const fileInput = document.getElementById('fileInput');
+    const files = fileInput.files ? Array.from(fileInput.files) : [];
+    if (files.length === 0) {
+        // No files selected, do nothing
         return;
     }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const sheetName = workbook.SheetNames.includes(CANONICAL_SHEET_NAME) ? CANONICAL_SHEET_NAME : workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            if (!worksheet || !worksheet['!ref']) {
-                throw new Error('The selected workbook does not contain a readable inventory sheet.');
+
+    const submitButton = document.querySelector('#uploadForm button[type="submit"]');
+    const originalButtonText = submitButton ? submitButton.textContent : '';
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Processing...';
+    }
+
+    let totalAddedCount = 0;
+    let totalUpdatedCount = 0;
+    const failedFiles = [];
+    let succeededFiles = 0;
+
+    try {
+        for (const file of files) {
+            const lowerCaseName = (file.name || '').toLowerCase();
+            const isAllowedSpreadsheet = ALLOWED_SPREADSHEET_EXTENSIONS.some(extension => lowerCaseName.endsWith(extension));
+            if (!isAllowedSpreadsheet) {
+                failedFiles.push(file.name || 'Unknown file');
+                continue;
             }
 
-            const range = XLSX.utils.decode_range(worksheet['!ref']);
-            const maxRow = range.e.r;
-            const maxCol = range.e.c;
-            const headers = [];
-            for (let c = 0; c <= maxCol; c++) {
-                headers.push(getWorksheetCellValue(worksheet, 0, c));
+            try {
+                const arrayBuffer = await readFileAsArrayBuffer(file);
+                const result = importSpreadsheetData(arrayBuffer);
+                totalAddedCount += result.addedCount;
+                totalUpdatedCount += result.updatedCount;
+                succeededFiles++;
+            } catch (error) {
+                failedFiles.push(file.name || 'Unknown file');
             }
-            const colMap = getSpreadsheetColumnMap(headers);
-            if (colMap.sku === undefined) {
-                throw new Error(`The workbook must contain the SKU column from ${CANONICAL_SPREADSHEET_NAME}.`);
-            }
+        }
 
-            let addedCount = 0;
-            let updatedCount = 0;
-            for (let r = 1; r <= maxRow; r++) {
-                const sku = normalizeText(getWorksheetCellValue(worksheet, r, colMap.sku));
-                if (!sku) {
-                    continue;
-                }
-
-                const importedFields = ['sku'];
-                const importedProduct = {
-                    sku,
-                    condition: normalizeText(getWorksheetCellValue(worksheet, r, colMap.condition)),
-                    desc: normalizeText(getWorksheetCellValue(worksheet, r, colMap.desc)),
-                    brand: normalizeText(getWorksheetCellValue(worksheet, r, colMap.brand)),
-                    asin: normalizeText(getWorksheetCellValue(worksheet, r, colMap.asin)),
-                    name: normalizeText(getWorksheetCellValue(worksheet, r, colMap.name)),
-                    seller: normalizeText(getWorksheetCellValue(worksheet, r, colMap.seller)),
-                    quantity: parseIntegerOrBlank(getWorksheetCellValue(worksheet, r, colMap.quantity)),
-                    price: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.price)),
-                    totalPrice: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.totalPrice)),
-                    cost: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.cost)),
-                    location: normalizeText(getWorksheetCellValue(worksheet, r, colMap.location)),
-                    receivedDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.receivedDate)),
-                    listDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.listDate)),
-                    soldDate: normalizeText(getWorksheetCellValue(worksheet, r, colMap.soldDate)),
-                    retail: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.retail)),
-                    soldFor: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.soldFor)),
-                    profit: parseNumberOrBlank(getWorksheetCellValue(worksheet, r, colMap.profit)),
-                    hyperlink: normalizeText(getWorksheetCellValue(worksheet, r, colMap.hyperlink)),
-                    orderNumber: normalizeText(getWorksheetCellValue(worksheet, r, colMap.orderNumber)),
-                    purchaseName: normalizeText(getWorksheetCellValue(worksheet, r, colMap.purchaseName)),
-                    purchaseSource: normalizeText(getWorksheetCellValue(worksheet, r, colMap.purchaseSource)),
-                    notes: []
-                };
-
-                Object.keys(colMap).forEach(field => {
-                    if (field === 'notes' || field === 'sku') {
-                        return;
-                    }
-                    const rawValue = getWorksheetCellValue(worksheet, r, colMap[field]);
-                    if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
-                        importedFields.push(field);
-                    }
-                });
-
-                if (colMap.name !== undefined && !importedFields.includes('name')) {
-                    importedFields.push('name');
-                }
-                if (colMap.seller !== undefined && !importedFields.includes('seller')) {
-                    importedFields.push('seller');
-                }
-
-                const noteText = normalizeText(getWorksheetCellValue(worksheet, r, colMap.notes));
-                if (noteText) {
-                    importedProduct.notes = [{type: 'Product', text: noteText}];
-                    importedFields.push('notes');
-                }
-
-                const existingIndex = products.findIndex(product => product.sku === sku);
-                if (existingIndex >= 0) {
-                    products[existingIndex] = mergeProductData(products[existingIndex], importedProduct, importedFields);
-                    updatedCount++;
-                } else {
-                    products.push(normalizeProduct(importedProduct));
-                    addedCount++;
-                }
-            }
-
+        if (succeededFiles > 0) {
             saveData();
             showInventory();
-        } catch (error) {
-            alert('Error parsing spreadsheet: ' + error.message);
         }
-    };
-    reader.readAsArrayBuffer(file);
+
+        const failedFileSummary = `\nFailed files (${failedFiles.length})${failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''}`;
+        alert(`Import run complete.\nFiles processed: ${files.length}\nSuccessfully imported: ${succeededFiles}\nAdded: ${totalAddedCount}\nUpdated: ${totalUpdatedCount}${failedFileSummary}`);
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = originalButtonText;
+        }
+    }
 }
 
 function showAddProductForm() {

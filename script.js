@@ -1071,9 +1071,9 @@ function showInventory(sortByLocation = false) {
         const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1;
         if (inventoryPage > totalPages) inventoryPage = totalPages;
         if (inventoryPage < 1) inventoryPage = 1;
-        const startIdx = filteredProducts.length > 0 ? (inventoryPage - 1) * ITEMS_PER_PAGE : 0;
-        const endIdx = filteredProducts.length > 0 ? Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length) : 0;
-        const shownItemCount = filteredProducts.length > 0 ? endIdx - startIdx : 0;
+        const startIdx = (inventoryPage - 1) * ITEMS_PER_PAGE;
+        const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, filteredProducts.length);
+        const shownItemCount = endIdx - startIdx;
         html += `<div style='margin:0.25rem 0;font-size:0.9rem;'>Showing ${shownItemCount} of ${filteredProducts.length} items (page ${inventoryPage})</div>`;
         if (filteredProducts.length > ITEMS_PER_PAGE) {
             html += `<div style='margin:0.5rem 0;'>Page <span id='pageNum'>${inventoryPage}</span> of ${totalPages} ` +

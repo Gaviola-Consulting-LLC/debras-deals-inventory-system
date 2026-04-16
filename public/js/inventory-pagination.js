@@ -36,6 +36,7 @@
 
     var settings = {
         endpoint: '/api/inventory',
+        limit: 10,
         tableBodySelector: '#inventory-table tbody',
         paginationSelector: '#pagination-controls',
         deleteButtonSelector: '.delete-btn',
@@ -73,8 +74,9 @@
                 renderTable(items);
                 renderPagination();
             })
-            .fail(function () {
-                alert('Unable to load inventory for this page. Please try again.');
+            .fail(function (jqXHR) {
+                var statusText = jqXHR && jqXHR.status ? ' (HTTP ' + jqXHR.status + ')' : '';
+                alert('Unable to load inventory for this page' + statusText + '. Please try again.');
             });
     }
 
@@ -146,8 +148,9 @@
         }).done(function () {
             state.total = Math.max(0, state.total - 1);
             loadCurrentPageOrPreviousIfEmpty();
-        }).fail(function () {
-            alert('Unable to delete this inventory item. Please try again.');
+        }).fail(function (jqXHR) {
+            var statusText = jqXHR && jqXHR.status ? ' (HTTP ' + jqXHR.status + ')' : '';
+            alert('Unable to delete this inventory item' + statusText + '. Please try again.');
         });
     }
 

@@ -690,7 +690,7 @@ async function uploadSpreadsheet(e) {
         }
 
         const failedFileSummary = `\nFailed files (${failedFiles.length})${failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''}`;
-        alert(`Import complete.\nFiles processed: ${files.length}\nAdded: ${totalAddedCount}\nUpdated: ${totalUpdatedCount}${failedFileSummary}`);
+        alert(`Import run complete.\nFiles processed: ${files.length}\nSuccessfully imported: ${succeededFiles}\nAdded: ${totalAddedCount}\nUpdated: ${totalUpdatedCount}${failedFileSummary}`);
     } finally {
         if (submitButton) {
             submitButton.disabled = false;

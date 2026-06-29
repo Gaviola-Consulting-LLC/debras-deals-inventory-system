@@ -2,40 +2,7 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
-const session          = require('express-session');
-const schedulingRoutes = require('./scheduling-routes');
-
 const PORT = process.env.PORT || 4000;
-
-function setNoCacheHeaders(res) {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-}
-
-app.get(['/domino', '/dominoes', '/dominoes.html'], (req, res) => {
-    setNoCacheHeaders(res);
-    res.sendFile(path.join(__dirname, 'domino.html'));
-});
-
-app.get('/domino.css', (req, res) => {
-    setNoCacheHeaders(res);
-    res.sendFile(path.join(__dirname, 'domino.css'));
-});
-
-app.get('/domino.js', (req, res) => {
-    setNoCacheHeaders(res);
-    res.sendFile(path.join(__dirname, 'domino.js'));
-});
-
-app.use(express.json());
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'sched-dev-secret-change-in-prod',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'strict', maxAge: 8 * 60 * 60 * 1000 }, // 8 h
-}));
-app.use('/api/schedule', schedulingRoutes);
 const FETCH_TIMEOUT_MS = 10000;
 
 function isPrivateOrLocalHostname(hostname) {
